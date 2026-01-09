@@ -3,7 +3,7 @@ title: Live Token Tracker when Chatting
 description: Tracks token usage and timing for the Chat
 authors: WillLiang713
 funding_url: https://github.com/open-webui
-version: 0.0.2
+version: 1.0.0
 license: MIT
 requirements: tiktoken, pydantic
 environment_variables:
