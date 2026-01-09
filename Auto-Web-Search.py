@@ -1,25 +1,21 @@
 """
-title: Auto Web Search
+title: 自动网络搜索
 author: @WillLiang713
 description: A tool for performing automated web searches.
 repository_url: https://github.com/WillLiang713/OpenWebUI-Auto-Web-Search
 version: 1.0.0
 required_open_webui_version: >= 0.6.0
-requirements: aiohttp
-license: see extension documentation file `auto_web_search.md` (License section) for the licensing terms.
 """
 
 import json
 from typing import Any, Literal, Optional, cast
 from urllib.parse import urlparse
 
-import aiohttp
 from open_webui.main import Request, app
 from open_webui.models.users import UserModel, Users
 from open_webui.retrieval.utils import get_content_from_url
 from open_webui.routers.retrieval import SearchForm, process_web_search
 from pydantic import BaseModel, Field
-from urllib.parse import urlparse
 
 
 async def emit_status(
@@ -65,31 +61,9 @@ async def get_request() -> Request:
 
 class Tools:
     class Valves(BaseModel):
-        SEARCH_MODE: Literal["native", "perplexica"] = Field(
-            default="native",
-            description="Search mode (native or perplexica)",
-        )
         MAX_SEARCH_QUERIES: int = Field(
-        default=1,
-        description="Max queries to use (1-3). Default: 1.",
-        )
-        PERPLEXICA_BASE_URL: str = Field(
-            default="http://host.docker.internal:3001",
-            description="Base URL for the Perplexica API",
-        )
-        PERPLEXICA_OPTIMIZATION_MODE: Literal["speed", "balanced"] = Field(
-            default="balanced",
-            description="Search optimization mode (speed or balanced)",
-        )
-        PERPLEXICA_CHAT_MODEL: str = Field(
-            default="gpt-5-chat-latest", description="Default chat model"
-        )
-        PERPLEXICA_EMBEDDING_MODEL: str = Field(
-            default="bge-m3:latest", description="Default embedding model"
-        )
-        OLLAMA_BASE_URL: str = Field(
-            default="http://host.docker.internal:11434",
-            description="Base URL for Ollama API",
+            default=1,
+            description="Max queries to use (1-3). Default: 1.",
         )
 
     def __init__(self):
@@ -162,27 +136,13 @@ class Tools:
 
         search_queries = cleaned[:max_q]
 
-        search_mode = self.valves.SEARCH_MODE
         user = Users.get_user_by_id(__user__["id"])
         if user is None:
             raise ValueError("User not found")
 
-        if search_mode == "perplexica":
-            return await perplexica_web_search(
-                search_queries,
-                base_url=self.valves.PERPLEXICA_BASE_URL,
-                optimization_mode=self.valves.PERPLEXICA_OPTIMIZATION_MODE,
-                chat_model=self.valves.PERPLEXICA_CHAT_MODEL,
-                embedding_model=self.valves.PERPLEXICA_EMBEDDING_MODEL,
-                emitter=__event_emitter__,
-                user=user,
-            )
-        elif search_mode == "native":
-            return await native_web_search(
-                search_queries, emitter=__event_emitter__, user=user
-            )
-        else:
-            raise ValueError(f"Unknown search mode: {search_mode}")
+        return await native_web_search(
+            search_queries, emitter=__event_emitter__, user=user
+        )
 
     async def fetch_url_content(
         self,
@@ -382,100 +342,3 @@ async def native_web_search(
 
 
 
-async def perplexica_web_search(
-    search_queries: list[str],
-    base_url: str,
-    optimization_mode: str,
-    chat_model: str,
-    embedding_model: str,
-    emitter: Any,
-    user: UserModel,
-) -> Any:
-    """Search using the Perplexica API."""
-    # fallback for legacy code
-    query = search_queries[0]
-
-    await emit_status(f"Initiating search for: {query}", emitter=emitter)
-
-    # Fixed: Use proper nested structure like the working Pipe
-    payload = {
-        "focusMode": "webSearch",
-        "optimizationMode": optimization_mode,
-        "query": query,
-        "chatModel": {
-            "provider": "ollama",
-            "name": chat_model,
-        },
-        "embeddingModel": {
-            "provider": "ollama",
-            "name": embedding_model,
-        },
-        "history": [],  # Changed from None to empty list
-    }
-
-    # Fixed: Clean up request body like the working Pipe
-    payload = {k: v for k, v in payload.items() if v is not None}
-    payload = {k: v for k, v in payload.items() if v != "default"}
-
-    try:
-        await emit_status(
-            "Sending request to Perplexica API", status="in_progress", emitter=emitter
-        )
-
-        # Fixed: Use aiohttp instead of requests for proper async handling
-        headers = {"Content-Type": "application/json"}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{base_url.rstrip('/')}/api/search",
-                json=payload,
-                headers=headers,
-            ) as response:
-                response.raise_for_status()
-                result = await response.json()
-
-        # Emit main content as citation
-        if emitter:
-            await emitter(
-                {
-                    "type": "citation",
-                    "data": {
-                        "document": [result["message"]],
-                        "metadata": [{"source": "Perplexica Search"}],
-                        "source": {"name": "Perplexica"},
-                    },
-                }
-            )
-
-        # Emit each source as a citation
-        if result.get("sources") and emitter:
-            for source in result["sources"]:
-                await emitter(
-                    {
-                        "type": "citation",
-                        "data": {
-                            "document": [source["pageContent"]],
-                            "metadata": [{"source": source["metadata"]["url"]}],
-                            "source": {"name": source["metadata"]["title"]},
-                        },
-                    }
-                )
-
-        await emit_status(
-            "search completed successfully",
-            status="complete",
-            emitter=emitter,
-        )
-
-        # Format response with citations
-        response_text = f"{result['message']}\n\nSources:\n"
-        response_text += "- Perplexica Search\n"
-        for source in result.get("sources", []):
-            response_text += (
-                f"- {source['metadata']['title']}: {source['metadata']['url']}\n"
-            )
-        return response_text
-
-    except Exception as e:
-        error_msg = f"error performing search: {str(e)}"
-        await emit_status(error_msg, status="error", emitter=emitter)
-        return error_msg
