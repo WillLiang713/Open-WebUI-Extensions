@@ -347,9 +347,12 @@ async def native_web_search(
                 "urls": [sr["url"] for sr in search_results],
                 "items": [
                     {
-                        {"title": sr["name"], "link": sr["url"], "url": sr["url"], "source": sr["url"]}
-                        for sr in search_results
+                        "title": sr["name"],
+                        "link": sr["url"],
+                        "url": sr["url"],
+                        "source": sr["url"],
                     }
+                    for sr in search_results
                 ],
             },
             emitter=emitter,
