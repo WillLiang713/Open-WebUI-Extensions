@@ -1,5 +1,5 @@
 """
-title: 自动网络搜索
+title: Auto-Web-Search
 author: @WillLiang713
 description: A tool for performing automated web searches.
 repository_url: https://github.com/WillLiang713/OpenWebUI-Auto-Web-Search
