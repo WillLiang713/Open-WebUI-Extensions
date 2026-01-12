@@ -1,9 +1,9 @@
 """
 title: Live Token Tracker when Chatting
-description: Tracks token usage and timing for the Chat
-authors: WillLiang713
+description: Tracks token usage and timing for the Chat (supports multimodal content)
+authors: WillLiang713 (patched by ChatGPT)
 funding_url: https://github.com/open-webui
-version: 1.0.0
+version: 1.0.1
 license: MIT
 requirements: tiktoken, pydantic
 environment_variables:
@@ -15,11 +15,14 @@ import time
 from typing import Any, Awaitable, Callable, Optional
 
 import tiktoken
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class Config:
     DEBUG = False
+    # If True, count image blocks as a placeholder string "[image]" for rough token accounting.
+    # This is NOT real vision token counting, just a heuristic to avoid undercounting too much.
+    COUNT_IMAGES_AS_PLACEHOLDER = False
 
 
 def debug_print(msg: str):
@@ -45,10 +48,13 @@ class Filter:
         show_tokens: bool = True
         show_tokens_per_second: bool = True
         debug: bool = False
+        # Optional valve to count images as placeholder
+        count_images_as_placeholder: bool = False
 
     def __init__(self):
         self.valves = self.Valves()
         Config.DEBUG = self.valves.debug
+        Config.COUNT_IMAGES_AS_PLACEHOLDER = self.valves.count_images_as_placeholder
 
         self.input_tokens = 0
         self.start_time = None
@@ -67,6 +73,54 @@ class Filter:
                 cleaned.append(line)
         return "\n".join(cleaned).strip()
 
+    def _content_to_text(self, content: Any) -> str:
+        """
+        Convert OpenAI-style message content into plain text for token counting.
+        Supports:
+          - str
+          - list[{"type":"text","text":...}, {"type":"image_url",...}, ...]
+        Images are ignored by default (or optionally counted as "[image]" placeholder).
+        """
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                # item can be dict blocks (OpenAI multimodal format)
+                if isinstance(item, dict):
+                    t = item.get("type")
+                    if t == "text":
+                        parts.append(str(item.get("text", "")))
+                    elif t in ("image_url", "image", "input_image"):
+                        if Config.COUNT_IMAGES_AS_PLACEHOLDER:
+                            parts.append("[image]")
+                    else:
+                        # Unknown block type: ignore (or stringify if you prefer)
+                        pass
+                # some implementations may include raw strings in the list
+                elif isinstance(item, str):
+                    parts.append(item)
+                else:
+                    # ignore unknown item types
+                    pass
+
+            return "\n".join([p for p in parts if p]).strip()
+
+        # Fallback for unexpected types (dict/int/None)
+        return str(content or "")
+
+    def _messages_to_text(self, messages: list) -> str:
+        """
+        Turn a list of messages into a single text blob for token counting.
+        """
+        chunks = []
+        for m in messages:
+            content = self._content_to_text(m.get("content", ""))
+            if content:
+                chunks.append(content)
+        return "\n".join(chunks)
+
     async def inlet(
         self,
         body: dict,
@@ -79,8 +133,12 @@ class Filter:
          - Count input tokens
          - Mark start_time
         """
+        # Sync config with valves each call (in case UI toggles change at runtime)
+        Config.DEBUG = self.valves.debug
+        Config.COUNT_IMAGES_AS_PLACEHOLDER = self.valves.count_images_as_placeholder
+
         messages = body.get("messages", [])
-        content_str = "\n".join([m.get("content", "") for m in messages])
+        content_str = self._messages_to_text(messages)
         cleaned_text = self._remove_roles(content_str)
 
         enc = get_encoding_for_model(body.get("model", "unknown-model"))
@@ -113,12 +171,16 @@ class Filter:
          - Emit stats
         """
         end_time = time.time()
-        elapsed = end_time - self.start_time
+        elapsed = end_time - self.start_time if self.start_time else 0.0
 
+        # Some pipelines return the full message list; others may return only the assistant message.
+        # We'll follow your original approach: use the last message in body["messages"].
         messages = body.get("messages", [])
-        last_msg_content = messages[-1].get("content", "") if messages else ""
+        last_msg_raw = messages[-1].get("content", "") if messages else ""
+        last_msg_text = self._content_to_text(last_msg_raw)
+
         enc = get_encoding_for_model(body.get("model", "unknown-model"))
-        output_tokens = len(enc.encode(last_msg_content))
+        output_tokens = len(enc.encode(last_msg_text))
 
         total_tokens = self.input_tokens + output_tokens
         tokens_per_sec = total_tokens / elapsed if elapsed > 0 else 0.0
