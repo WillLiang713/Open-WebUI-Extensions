@@ -60,14 +60,7 @@ async def get_request() -> Request:
 
 
 class Tools:
-    class Valves(BaseModel):
-        MAX_SEARCH_QUERIES: int = Field(
-            default=1,
-            description="Max queries to use (1-3). Default: 1.",
-        )
-
     def __init__(self):
-        self.valves = self.Valves()
         self.tools = [
             {
                 "type": "function",
@@ -131,10 +124,7 @@ class Tools:
             if q:
                 cleaned.append(q)
 
-        max_q = int(getattr(self.valves, "MAX_SEARCH_QUERIES", 1) or 1)
-        max_q = max(1, min(5, max_q))
-
-        search_queries = cleaned[:max_q]
+        search_queries = cleaned[:5]
 
         user = Users.get_user_by_id(__user__["id"])
         if user is None:
