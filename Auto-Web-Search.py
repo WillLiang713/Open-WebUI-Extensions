@@ -8,9 +8,11 @@ required_open_webui_version: >= 0.6.0
 """
 
 import json
+import os
 from typing import Any, Literal, Optional, cast
 from urllib.parse import urlparse
 
+import httpx
 from open_webui.main import Request, app
 from open_webui.models.users import UserModel, Users
 from open_webui.retrieval.utils import get_content_from_url
@@ -59,8 +61,132 @@ async def get_request() -> Request:
     return Request(scope={"type": "http", "app": app})
 
 
+def _clean_value(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value or None
+
+
+def _resolve_key(valve_value: Optional[str], env_name: str) -> Optional[str]:
+    return _clean_value(valve_value) or _clean_value(os.getenv(env_name))
+
+
+def _resolve_base_url(value: Optional[str], env_name: str, default: str) -> str:
+    resolved = _clean_value(value) or _clean_value(os.getenv(env_name)) or default
+    return resolved.rstrip("/")
+
+
+def _normalize_provider(value: Optional[str], default: str) -> str:
+    cleaned = _clean_value(value) or default
+    return cleaned.lower()
+
+
+def _select_search_provider(provider: str, tavily_api_key: Optional[str]) -> str:
+    if provider == "tavily":
+        return "tavily" if tavily_api_key else "native"
+    if provider == "native":
+        return "native"
+    return "native"
+
+
+def _select_fetch_provider(
+    provider: str,
+    firecrawl_api_key: Optional[str],
+    tavily_api_key: Optional[str],
+) -> str:
+    if provider == "firecrawl":
+        return "firecrawl" if firecrawl_api_key else "native"
+    if provider == "tavily":
+        return "tavily" if tavily_api_key else "native"
+    if provider == "native":
+        return "native"
+    return "native"
+
+
+def _domain_from_url(u: str) -> str:
+    try:
+        return urlparse(u).netloc or u
+    except Exception:
+        return u
+
+
+def _normalize_search_item(item: dict[str, Any]) -> dict[str, str]:
+    url = item.get("link") or item.get("url") or ""
+    title = item.get("title") or item.get("name") or ""
+    content = item.get("snippet") or item.get("content") or item.get("text") or ""
+
+    url = str(url)
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        url = ""
+
+    name = title or (_domain_from_url(url) if url else "") or "unknown"
+    return {"name": str(name), "url": url, "content": str(content)}
+
+
+async def _emit_search_citations(
+    search_results: list[dict[str, str]], emitter: Any
+) -> None:
+    if not emitter:
+        return
+    for sr in search_results:
+        await emitter(
+            {
+                "type": "citation",
+                "data": {
+                    "document": [sr["content"]],
+                    "metadata": [
+                        {
+                            "source": sr["url"],
+                            "url": sr["url"],
+                            "link": sr["url"],
+                            "title": sr["name"],
+                            "name": sr["name"],
+                        }
+                    ],
+                    "source": {
+                        "name": sr["name"],
+                        "url": sr["url"],
+                    },
+                },
+            }
+        )
+
+
 class Tools:
+    class Valves(BaseModel):
+        search_provider: str = Field(
+            default="tavily",
+            description="Search provider: native or tavily.",
+        )
+        fetch_provider: str = Field(
+            default="firecrawl",
+            description="Fetch provider: native, firecrawl, or tavily.",
+        )
+        firecrawl_api_key: Optional[str] = Field(
+            default=None, description="API key for Firecrawl."
+        )
+        firecrawl_base_url: str = Field(
+            default="https://api.firecrawl.dev",
+            description="Firecrawl base URL.",
+        )
+        tavily_api_key: Optional[str] = Field(
+            default=None, description="API key for Tavily."
+        )
+        tavily_base_url: str = Field(
+            default="https://api.tavily.com",
+            description="Tavily base URL.",
+        )
+        tavily_search_depth: str = Field(
+            default="basic",
+            description="Tavily search depth (basic or advanced).",
+        )
+        tavily_max_results: int = Field(
+            default=5, ge=1, le=10, description="Max results per query for Tavily."
+        )
+
     def __init__(self):
+        self.valves = self.Valves()
         self.tools = [
             {
                 "type": "function",
@@ -130,8 +256,22 @@ class Tools:
         if user is None:
             raise ValueError("User not found")
 
-        return await native_web_search(
-            search_queries, emitter=__event_emitter__, user=user
+        tavily_api_key = _resolve_key(self.valves.tavily_api_key, "TAVILY_API_KEY")
+        search_provider = _normalize_provider(self.valves.search_provider, "tavily")
+
+        return await web_search_with_provider(
+            search_queries,
+            emitter=__event_emitter__,
+            user=user,
+            provider=search_provider,
+            tavily_api_key=tavily_api_key,
+            tavily_base_url=_resolve_base_url(
+                self.valves.tavily_base_url,
+                "TAVILY_BASE_URL",
+                "https://api.tavily.com",
+            ),
+            tavily_search_depth=self.valves.tavily_search_depth,
+            tavily_max_results=self.valves.tavily_max_results,
         )
 
     async def fetch_url_content(
@@ -148,10 +288,33 @@ class Tools:
         if user is None:
             raise ValueError("User not found")
 
-        return await fetch_url(url, emitter=__event_emitter__, user=user)
+        firecrawl_api_key = _resolve_key(
+            self.valves.firecrawl_api_key, "FIRECRAWL_API_KEY"
+        )
+        tavily_api_key = _resolve_key(self.valves.tavily_api_key, "TAVILY_API_KEY")
+        fetch_provider = _normalize_provider(self.valves.fetch_provider, "firecrawl")
+
+        return await fetch_url_with_fallback(
+            url,
+            emitter=__event_emitter__,
+            user=user,
+            provider=fetch_provider,
+            firecrawl_api_key=firecrawl_api_key,
+            firecrawl_base_url=_resolve_base_url(
+                self.valves.firecrawl_base_url,
+                "FIRECRAWL_BASE_URL",
+                "https://api.firecrawl.dev",
+            ),
+            tavily_api_key=tavily_api_key,
+            tavily_base_url=_resolve_base_url(
+                self.valves.tavily_base_url,
+                "TAVILY_BASE_URL",
+                "https://api.tavily.com",
+            ),
+        )
 
 
-async def fetch_url(url: str, emitter: Any, user: UserModel) -> str:
+async def native_fetch_url(url: str, emitter: Any, user: UserModel) -> str:
     """Fetch content from a URL using the native web loader."""
     try:
         # Extract domain name from URL
@@ -220,6 +383,328 @@ async def fetch_url(url: str, emitter: Any, user: UserModel) -> str:
         )
 
 
+async def fetch_url_with_fallback(
+    url: str,
+    emitter: Any,
+    user: UserModel,
+    provider: str,
+    firecrawl_api_key: Optional[str] = None,
+    firecrawl_base_url: str = "https://api.firecrawl.dev",
+    tavily_api_key: Optional[str] = None,
+    tavily_base_url: str = "https://api.tavily.com",
+) -> str:
+    selected = _select_fetch_provider(provider, firecrawl_api_key, tavily_api_key)
+    if selected == "firecrawl":
+        return await firecrawl_fetch_url(
+            url=url,
+            emitter=emitter,
+            api_key=firecrawl_api_key,
+            base_url=firecrawl_base_url,
+        )
+    if selected == "tavily":
+        return await tavily_fetch_url(
+            url=url,
+            emitter=emitter,
+            api_key=tavily_api_key,
+            base_url=tavily_base_url,
+        )
+    return await native_fetch_url(url=url, emitter=emitter, user=user)
+
+
+async def firecrawl_fetch_url(
+    url: str, emitter: Any, api_key: str, base_url: str
+) -> str:
+    try:
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc or parsed_url.path.split("/")[0]
+
+        await emit_status(
+            f"browsing {domain}",
+            status="in_progress",
+            emitter=emitter,
+            done=False,
+        )
+
+        endpoint = f"{base_url}/v2/scrape"
+        payload = {
+            "url": url,
+            "formats": ["markdown"],
+            "onlyMainContent": True,
+            "timeout": 30000,
+        }
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(endpoint, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        if isinstance(data, dict) and data.get("success") is False:
+            raise RuntimeError(data.get("error") or "Firecrawl request failed")
+
+        payload_data = data.get("data") if isinstance(data, dict) else {}
+        if not isinstance(payload_data, dict):
+            payload_data = {}
+
+        content = ""
+        for key in ("markdown", "content", "text", "html"):
+            if payload_data.get(key):
+                content = str(payload_data.get(key) or "")
+                break
+
+        metadata = payload_data.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        if payload_data.get("title") and not metadata.get("title"):
+            metadata["title"] = payload_data.get("title")
+        metadata.setdefault("source", url)
+        metadata.setdefault("url", url)
+
+        await emitter(
+            {
+                "type": "citation",
+                "data": {
+                    "document": [content],
+                    "metadata": [metadata],
+                    "source": {
+                        "name": metadata.get("title") or metadata.get("source") or url
+                    },
+                },
+            }
+        )
+
+        await emit_status(
+            f"read webpage from {domain}",
+            status="complete",
+            emitter=emitter,
+            extra_data={"url": url},
+        )
+
+        return json.dumps(
+            {
+                "status": "success",
+                "url": url,
+                "content": content,
+                "documents": [{"content": content, "metadata": metadata}],
+            }
+        )
+
+    except Exception as e:
+        await emit_status(
+            "failed to read webpage",
+            status="error",
+            emitter=emitter,
+            error=True,
+        )
+        return json.dumps(
+            {
+                "status": "error",
+                "url": url,
+                "error": str(e),
+            }
+        )
+
+
+async def tavily_fetch_url(
+    url: str, emitter: Any, api_key: str, base_url: str
+) -> str:
+    try:
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc or parsed_url.path.split("/")[0]
+
+        await emit_status(
+            f"browsing {domain}",
+            status="in_progress",
+            emitter=emitter,
+            done=False,
+        )
+
+        endpoint = f"{base_url}/extract"
+        payload = {
+            "api_key": api_key,
+            "urls": [url],
+            "include_images": False,
+            "include_raw_content": False,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(endpoint, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        results = data.get("results") if isinstance(data, dict) else None
+        item = results[0] if isinstance(results, list) and results else {}
+        if not isinstance(item, dict):
+            item = {}
+
+        content = (
+            item.get("content")
+            or item.get("raw_content")
+            or item.get("text")
+            or ""
+        )
+        metadata = {
+            "source": item.get("url") or url,
+            "url": item.get("url") or url,
+            "title": item.get("title") or item.get("name") or _domain_from_url(url),
+        }
+
+        await emitter(
+            {
+                "type": "citation",
+                "data": {
+                    "document": [content],
+                    "metadata": [metadata],
+                    "source": {
+                        "name": metadata.get("title") or metadata.get("source") or url
+                    },
+                },
+            }
+        )
+
+        await emit_status(
+            f"read webpage from {domain}",
+            status="complete",
+            emitter=emitter,
+            extra_data={"url": url},
+        )
+
+        return json.dumps(
+            {
+                "status": "success",
+                "url": url,
+                "content": content,
+                "documents": [{"content": content, "metadata": metadata}],
+            }
+        )
+
+    except Exception as e:
+        await emit_status(
+            "failed to read webpage",
+            status="error",
+            emitter=emitter,
+            error=True,
+        )
+        return json.dumps(
+            {
+                "status": "error",
+                "url": url,
+                "error": str(e),
+            }
+        )
+
+
+async def web_search_with_provider(
+    search_queries: list[str],
+    emitter: Any,
+    user: UserModel,
+    provider: str,
+    tavily_api_key: Optional[str] = None,
+    tavily_base_url: str = "https://api.tavily.com",
+    tavily_search_depth: str = "basic",
+    tavily_max_results: int = 5,
+) -> str:
+    selected = _select_search_provider(provider, tavily_api_key)
+    if selected == "tavily":
+        return await tavily_web_search(
+            search_queries=search_queries,
+            emitter=emitter,
+            api_key=tavily_api_key,
+            base_url=tavily_base_url,
+            search_depth=tavily_search_depth,
+            max_results=tavily_max_results,
+        )
+    return await native_web_search(
+        search_queries=search_queries,
+        emitter=emitter,
+        user=user,
+    )
+
+
+async def tavily_web_search(
+    search_queries: list[str],
+    emitter: Any,
+    api_key: str,
+    base_url: str,
+    search_depth: str,
+    max_results: int,
+) -> str:
+    try:
+        await emit_status(
+            "searching the web",
+            extra_data={"queries": search_queries},
+            status="web_search_queries_generated",
+            done=False,
+            emitter=emitter,
+        )
+
+        endpoint = f"{base_url}/search"
+        results: list[dict[str, Any]] = []
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for query in search_queries:
+                payload = {
+                    "api_key": api_key,
+                    "query": query,
+                    "search_depth": search_depth,
+                    "include_answer": False,
+                    "include_images": False,
+                    "include_raw_content": False,
+                    "max_results": max_results,
+                }
+                response = await client.post(endpoint, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                items = data.get("results") if isinstance(data, dict) else None
+                if isinstance(items, list):
+                    results.extend(items)
+
+        search_results = [_normalize_search_item(it) for it in results if it]
+        await _emit_search_citations(search_results, emitter)
+
+        await emit_status(
+            f"searched {len(search_results)} website{'s' if len(search_results) != 1 else ''}",
+            status="web_search",
+            done=True,
+            extra_data={
+                "urls": [sr["url"] for sr in search_results],
+                "items": [
+                    {
+                        "title": sr["name"],
+                        "link": sr["url"],
+                        "url": sr["url"],
+                        "source": sr["url"],
+                    }
+                    for sr in search_results
+                ],
+            },
+            emitter=emitter,
+        )
+
+        return json.dumps(
+            {
+                "status": "web search completed successfully!",
+                "result_count": len(search_results),
+                "results": search_results,
+            }
+        )
+
+    except Exception as e:
+        await emit_status(
+            f"encountered an error while searching the web: {str(e)}",
+            status="error",
+            done=True,
+            error=True,
+            emitter=emitter,
+        )
+        return json.dumps(
+            {
+                "status": "web search failed",
+                "error": str(e),
+            }
+        )
+
+
 async def native_web_search(
     search_queries: list[str], emitter: Any, user: UserModel
 ) -> str:
@@ -238,54 +723,12 @@ async def native_web_search(
             request=await get_request(), form_data=form, user=user
         )
 
-        items = cast(list[dict[str, Any]], result.get("items") or result.get("docs") or [])
+        items = cast(
+            list[dict[str, Any]], result.get("items") or result.get("docs") or []
+        )
 
-        def _domain(u: str) -> str:
-            try:
-                return urlparse(u).netloc or u
-            except Exception:
-                return u
-
-        def normalize_item(item: dict[str, Any]) -> dict[str, str]:
-            url = item.get("link") or item.get("url") or ""
-            title = item.get("title") or ""
-            content = item.get("snippet") or item.get("content") or item.get("text") or ""
-
-            url = str(url)
-            if url and not (url.startswith("http://") or url.startswith("https://")):
-                url = ""
-
-            name = title or (_domain(url) if url else "") or "unknown"
-            return {"name": str(name), "url": url, "content": str(content)}
-
-
-        search_results = [normalize_item(it) for it in items if it]
-
-        if emitter:
-            for sr in search_results:
-                await emitter(
-                    {
-                        "type": "citation",
-                        "data": {
-                            "document": [sr["content"]],
-                            "metadata": [
-                                {
-                                    "source": sr["url"],
-                                    "url": sr["url"],
-                                    "link": sr["url"],
-                                    "title": sr["name"],
-                                    "name": sr["name"],
-                                }
-                            ],
-                            "source": {
-                                "name": sr["name"],
-                                "url": sr["url"],
-                            },
-                        },
-                    }
-                )
-                
-
+        search_results = [_normalize_search_item(it) for it in items if it]
+        await _emit_search_citations(search_results, emitter)
         await emit_status(
             f"searched {len(search_results)} website{'s' if len(search_results) != 1 else ''}",
             status="web_search",

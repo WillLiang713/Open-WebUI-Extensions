@@ -1,0 +1,121 @@
+curl --request POST \
+  --url https://api.firecrawl.dev/v2/scrape \
+  --header "Authorization: Bearer xxxx" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "url": "https://www.aloxaf.com/2025/04/how_to_use_geosite/#%E6%AD%A3%E7%A1%AE%E7%94%A8%E6%B3%95",
+    "formats": ["markdown"],
+    "onlyMainContent": true,
+    "timeout": 30000
+  }'
+
+  openwebui-1  | 2026-01-13 03:19:54.899 | ERROR    | open_webui.retrieval.web.utils:lazy_load:277 - Error extracting content from URLs: Batch scrape job 019bb55d-e124-721c-bfdd-d32ef8c6a76f did not complete within 3 seconds
+openwebui-1  | Traceback (most recent call last):
+openwebui-1  | 
+openwebui-1  |   File "<frozen runpy>", line 198, in _run_module_as_main
+openwebui-1  |   File "<frozen runpy>", line 88, in _run_code
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/__main__.py", line 4, in <module>
+openwebui-1  |     uvicorn.main()
+openwebui-1  |     │       └ <Command main>
+openwebui-1  |     └ <module 'uvicorn' from '/usr/local/lib/python3.11/site-packages/uvicorn/__init__.py'>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/click/core.py", line 1485, in __call__
+openwebui-1  |     return self.main(*args, **kwargs)
+openwebui-1  |            │    │     │       └ {}
+openwebui-1  |            │    │     └ ()
+openwebui-1  |            │    └ <function Command.main at 0x700d02c7ee80>
+openwebui-1  |            └ <Command main>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/click/core.py", line 1406, in main
+openwebui-1  |     rv = self.invoke(ctx)
+openwebui-1  |          │    │      └ <click.core.Context object at 0x700d039fc610>
+openwebui-1  |          │    └ <function Command.invoke at 0x700d02c7eb60>
+openwebui-1  |          └ <Command main>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/click/core.py", line 1269, in invoke
+openwebui-1  |     return ctx.invoke(self.callback, **ctx.params)
+openwebui-1  |            │   │      │    │           │   └ {'host': '0.0.0.0', 'port': 8080, 'forwarded_allow_ips': '*', 'workers': 1, 'app': 'open_webui.main:app', 'uds': None, 'fd': ...
+openwebui-1  |            │   │      │    │           └ <click.core.Context object at 0x700d039fc610>
+openwebui-1  |            │   │      │    └ <function main at 0x700d02930b80>
+openwebui-1  |            │   │      └ <Command main>
+openwebui-1  |            │   └ <function Context.invoke at 0x700d02c7dda0>
+openwebui-1  |            └ <click.core.Context object at 0x700d039fc610>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/click/core.py", line 824, in invoke
+openwebui-1  |     return callback(*args, **kwargs)
+openwebui-1  |            │         │       └ {'host': '0.0.0.0', 'port': 8080, 'forwarded_allow_ips': '*', 'workers': 1, 'app': 'open_webui.main:app', 'uds': None, 'fd': ...
+openwebui-1  |            │         └ ()
+openwebui-1  |            └ <function main at 0x700d02930b80>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 424, in main
+openwebui-1  |     run(
+openwebui-1  |     └ <function run at 0x700d02bd54e0>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 594, in run
+openwebui-1  |     server.run()
+openwebui-1  |     │      └ <function Server.run at 0x700d02bd4d60>
+openwebui-1  |     └ <uvicorn.server.Server object at 0x700d02d52f10>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 67, in run
+openwebui-1  |     return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+openwebui-1  |            │           │    │             │                      │    │      └ <function Config.get_loop_factory at 0x700d02d594e0>
+openwebui-1  |            │           │    │             │                      │    └ <uvicorn.config.Config object at 0x700d0293ac90>
+openwebui-1  |            │           │    │             │                      └ <uvicorn.server.Server object at 0x700d02d52f10>
+openwebui-1  |            │           │    │             └ None
+openwebui-1  |            │           │    └ <function Server.serve at 0x700d02bd4e00>
+openwebui-1  |            │           └ <uvicorn.server.Server object at 0x700d02d52f10>
+openwebui-1  |            └ <function asyncio_run at 0x700d02c69e40>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
+openwebui-1  |     return runner.run(main)
+openwebui-1  |            │      │   └ <coroutine object Server.serve at 0x700d0292d8a0>
+openwebui-1  |            │      └ <function Runner.run at 0x700d02f18fe0>
+openwebui-1  |            └ <asyncio.runners.Runner object at 0x700d03a11e90>
+openwebui-1  |   File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
+openwebui-1  |     return self._loop.run_until_complete(task)
+openwebui-1  |            │    │     │                  └ <Task pending name='Task-1' coro=<Server.serve() running at /usr/local/lib/python3.11/site-packages/uvicorn/server.py:71> wai...
+openwebui-1  |            │    │     └ <cyfunction Loop.run_until_complete at 0x700d029a4040>
+openwebui-1  |            │    └ <uvloop.Loop running=True closed=False debug=False>
+openwebui-1  |            └ <asyncio.runners.Runner object at 0x700d03a11e90>
+openwebui-1  | 
+openwebui-1  |   File "/app/backend/open_webui/main.py", line 1729, in process_chat
+openwebui-1  |     return await process_chat_response(
+openwebui-1  |                  └ <function process_chat_response at 0x700c9464bc40>
+openwebui-1  | 
+openwebui-1  |   File "/app/backend/open_webui/utils/middleware.py", line 3677, in process_chat_response
+openwebui-1  |     return await response_handler(response, events)
+openwebui-1  |                  │                │         └ []
+openwebui-1  |                  │                └ <starlette.responses.StreamingResponse object at 0x700c9032f790>
+openwebui-1  |                  └ <function process_chat_response.<locals>.response_handler at 0x700c712f5ee0>
+openwebui-1  | 
+openwebui-1  |   File "/app/backend/open_webui/utils/middleware.py", line 3321, in response_handler
+openwebui-1  |     tool_result = await tool_function(
+openwebui-1  |                         └ <function Tools.fetch_url_content at 0x700c9208c5e0>
+openwebui-1  | 
+openwebui-1  |   File "/app/backend/open_webui/utils/tools.py", line 107, in new_function
+openwebui-1  |     return await partial_func(*args, **kwargs)
+openwebui-1  |                  │             │       └ {'url': 'https://www.aloxaf.com/2025/04/how_to_use_geosite/#%E6%AD%A3%E7%A1%AE%E7%94%A8%E6%B3%95'}
+openwebui-1  |                  │             └ ()
+openwebui-1  |                  └ functools.partial(<bound method Tools.fetch_url_content of <tool_联网搜索.Tools object at 0x700c7010da50>>, __event_emitter__=<fu...
+openwebui-1  | 
+openwebui-1  |   File "<string>", line 151, in fetch_url_content
+openwebui-1  |   File "<string>", line 169, in fetch_url
+openwebui-1  | 
+openwebui-1  |   File "/app/backend/open_webui/retrieval/utils.py", line 86, in get_content_from_url
+openwebui-1  |     docs = loader.load()
+openwebui-1  |            │      └ <function BaseLoader.load at 0x700c96e0cd60>
+openwebui-1  |            └ <open_webui.retrieval.web.utils.SafeFireCrawlLoader object at 0x700cdaca8bd0>
+openwebui-1  | 
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/langchain_core/document_loaders/base.py", line 43, in load
+openwebui-1  |     return list(self.lazy_load())
+openwebui-1  |                 │    └ <function SafeFireCrawlLoader.lazy_load at 0x700c969959e0>
+openwebui-1  |                 └ <open_webui.retrieval.web.utils.SafeFireCrawlLoader object at 0x700cdaca8bd0>
+openwebui-1  | 
+openwebui-1  | > File "/app/backend/open_webui/retrieval/web/utils.py", line 252, in lazy_load
+openwebui-1  |     result = firecrawl.batch_scrape(
+openwebui-1  |              │         └ <bound method FirecrawlClient.batch_scrape of <firecrawl.v2.client.FirecrawlClient object at 0x700c91fa2010>>
+openwebui-1  |              └ <firecrawl.client.Firecrawl object at 0x700cd8621350>
+openwebui-1  | 
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/firecrawl/v2/client.py", line 953, in batch_scrape
+openwebui-1  |     return batch_module.batch_scrape(
+openwebui-1  |            │            └ <function batch_scrape at 0x700c920b6200>
+openwebui-1  |            └ <module 'firecrawl.v2.methods.batch' from '/usr/local/lib/python3.11/site-packages/firecrawl/v2/methods/batch.py'>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/firecrawl/v2/methods/batch.py", line 327, in batch_scrape
+openwebui-1  |     return wait_for_batch_completion(
+openwebui-1  |            └ <function wait_for_batch_completion at 0x700c920b53a0>
+openwebui-1  |   File "/usr/local/lib/python3.11/site-packages/firecrawl/v2/methods/batch.py", line 272, in wait_for_batch_completion
+openwebui-1  |     raise TimeoutError(f"Batch scrape job {job_id} did not complete within {timeout} seconds")
+openwebui-1  | 
+openwebui-1  | TimeoutError: Batch scrape job 019bb55d-e124-721c-bfdd-d32ef8c6a76f did not complete within 3 seconds
