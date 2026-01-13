@@ -183,7 +183,7 @@ class Filter:
         output_tokens = len(enc.encode(last_msg_text))
 
         total_tokens = self.input_tokens + output_tokens
-        tokens_per_sec = total_tokens / elapsed if elapsed > 0 else 0.0
+        tokens_per_sec = output_tokens / elapsed if elapsed > 0 else 0.0
 
         stats_list = []
         if self.valves.show_elapsed_time:
