@@ -82,9 +82,20 @@ def _normalize_provider(value: Optional[str], default: str) -> str:
     return cleaned.lower()
 
 
-def _select_search_provider(provider: str, tavily_api_key: Optional[str]) -> str:
+def _select_search_provider(
+    provider: str,
+    tavily_api_key: Optional[str],
+    exa_api_key: Optional[str],
+    jina_api_key: Optional[str],
+) -> str:
     if provider == "tavily":
         return "tavily" if tavily_api_key else "native"
+    if provider == "exa":
+        return "exa" if exa_api_key else "native"
+    if provider in ("jina", "jina_search"):
+        if jina_api_key:
+            return "jina_search"
+        return "jina_search"
     if provider == "native":
         return "native"
     return "native"
@@ -94,14 +105,35 @@ def _select_fetch_provider(
     provider: str,
     firecrawl_api_key: Optional[str],
     tavily_api_key: Optional[str],
+    exa_api_key: Optional[str],
 ) -> str:
     if provider == "firecrawl":
         return "firecrawl" if firecrawl_api_key else "native"
     if provider == "tavily":
         return "tavily" if tavily_api_key else "native"
+    if provider == "exa":
+        return "exa" if exa_api_key else "native"
+    if provider in ("jina", "jina_reader"):
+        return "jina_reader"
     if provider == "native":
         return "native"
     return "native"
+
+
+def _build_jina_search_url(base_url: str, query: str) -> tuple[str, dict[str, Any]]:
+    cleaned = base_url.rstrip("/")
+    if "{query}" in cleaned:
+        return cleaned.format(query=query), {}
+    if cleaned.endswith("/search"):
+        return cleaned, {"q": query}
+    return f"{cleaned}/search", {"q": query}
+
+
+def _build_jina_reader_url(base_url: str, url: str) -> str:
+    cleaned = base_url.rstrip("/")
+    if "{url}" in cleaned:
+        return cleaned.format(url=url)
+    return f"{cleaned}/{url}"
 
 
 def _domain_from_url(u: str) -> str:
@@ -157,11 +189,11 @@ class Tools:
     class Valves(BaseModel):
         search_provider: str = Field(
             default="tavily",
-            description="Search provider: native or tavily.",
+            description="Search provider: native, tavily, exa, or jina_search.",
         )
         fetch_provider: str = Field(
             default="firecrawl",
-            description="Fetch provider: native, firecrawl, or tavily.",
+            description="Fetch provider: native, firecrawl, tavily, exa, or jina_reader.",
         )
         firecrawl_api_key: Optional[str] = Field(
             default=None, description="API key for Firecrawl."
@@ -183,6 +215,26 @@ class Tools:
         )
         tavily_max_results: int = Field(
             default=5, ge=1, le=10, description="Max results per query for Tavily."
+        )
+        exa_api_key: Optional[str] = Field(default=None, description="API key for Exa.")
+        exa_base_url: str = Field(
+            default="https://api.exa.ai",
+            description="Exa base URL.",
+        )
+        exa_max_results: int = Field(
+            default=5, ge=1, le=10, description="Max results per query for Exa."
+        )
+        jina_api_key: Optional[str] = Field(default=None, description="API key for Jina.")
+        jina_search_base_url: str = Field(
+            default="https://s.jina.ai",
+            description="Jina Search base URL.",
+        )
+        jina_search_max_results: int = Field(
+            default=5, ge=1, le=10, description="Max results per query for Jina Search."
+        )
+        jina_reader_base_url: str = Field(
+            default="https://r.jina.ai",
+            description="Jina Reader base URL.",
         )
 
     def __init__(self):
@@ -272,6 +324,20 @@ class Tools:
             ),
             tavily_search_depth=self.valves.tavily_search_depth,
             tavily_max_results=self.valves.tavily_max_results,
+            exa_api_key=_resolve_key(self.valves.exa_api_key, "EXA_API_KEY"),
+            exa_base_url=_resolve_base_url(
+                self.valves.exa_base_url,
+                "EXA_BASE_URL",
+                "https://api.exa.ai",
+            ),
+            exa_max_results=self.valves.exa_max_results,
+            jina_api_key=_resolve_key(self.valves.jina_api_key, "JINA_API_KEY"),
+            jina_search_base_url=_resolve_base_url(
+                self.valves.jina_search_base_url,
+                "JINA_SEARCH_BASE_URL",
+                "https://s.jina.ai",
+            ),
+            jina_search_max_results=self.valves.jina_search_max_results,
         )
 
     async def fetch_url_content(
@@ -293,6 +359,8 @@ class Tools:
         )
         tavily_api_key = _resolve_key(self.valves.tavily_api_key, "TAVILY_API_KEY")
         fetch_provider = _normalize_provider(self.valves.fetch_provider, "firecrawl")
+        exa_api_key = _resolve_key(self.valves.exa_api_key, "EXA_API_KEY")
+        jina_api_key = _resolve_key(self.valves.jina_api_key, "JINA_API_KEY")
 
         return await fetch_url_with_fallback(
             url,
@@ -310,6 +378,18 @@ class Tools:
                 self.valves.tavily_base_url,
                 "TAVILY_BASE_URL",
                 "https://api.tavily.com",
+            ),
+            exa_api_key=exa_api_key,
+            exa_base_url=_resolve_base_url(
+                self.valves.exa_base_url,
+                "EXA_BASE_URL",
+                "https://api.exa.ai",
+            ),
+            jina_api_key=jina_api_key,
+            jina_reader_base_url=_resolve_base_url(
+                self.valves.jina_reader_base_url,
+                "JINA_READER_BASE_URL",
+                "https://r.jina.ai",
             ),
         )
 
@@ -392,8 +472,14 @@ async def fetch_url_with_fallback(
     firecrawl_base_url: str = "https://api.firecrawl.dev",
     tavily_api_key: Optional[str] = None,
     tavily_base_url: str = "https://api.tavily.com",
+    exa_api_key: Optional[str] = None,
+    exa_base_url: str = "https://api.exa.ai",
+    jina_api_key: Optional[str] = None,
+    jina_reader_base_url: str = "https://r.jina.ai",
 ) -> str:
-    selected = _select_fetch_provider(provider, firecrawl_api_key, tavily_api_key)
+    selected = _select_fetch_provider(
+        provider, firecrawl_api_key, tavily_api_key, exa_api_key
+    )
     if selected == "firecrawl":
         return await firecrawl_fetch_url(
             url=url,
@@ -407,6 +493,20 @@ async def fetch_url_with_fallback(
             emitter=emitter,
             api_key=tavily_api_key,
             base_url=tavily_base_url,
+        )
+    if selected == "exa":
+        return await exa_fetch_url(
+            url=url,
+            emitter=emitter,
+            api_key=exa_api_key,
+            base_url=exa_base_url,
+        )
+    if selected == "jina_reader":
+        return await jina_reader_fetch_url(
+            url=url,
+            emitter=emitter,
+            api_key=jina_api_key,
+            base_url=jina_reader_base_url,
         )
     return await native_fetch_url(url=url, emitter=emitter, user=user)
 
@@ -594,6 +694,186 @@ async def tavily_fetch_url(
         )
 
 
+async def exa_fetch_url(
+    url: str, emitter: Any, api_key: str, base_url: str
+) -> str:
+    try:
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc or parsed_url.path.split("/")[0]
+
+        await emit_status(
+            f"browsing {domain}",
+            status="in_progress",
+            emitter=emitter,
+            done=False,
+        )
+
+        endpoint = f"{base_url}/contents"
+        payload = {"urls": [url], "text": True}
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(endpoint, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        results = data.get("results") if isinstance(data, dict) else None
+        item = results[0] if isinstance(results, list) and results else {}
+        if not isinstance(item, dict):
+            item = {}
+
+        content = (
+            item.get("text")
+            or item.get("content")
+            or item.get("summary")
+            or item.get("snippet")
+            or item.get("highlights")
+            or ""
+        )
+        if isinstance(content, list):
+            content = "\n".join([str(part) for part in content if part])
+        if not isinstance(content, str):
+            content = str(content)
+
+        metadata = {
+            "source": item.get("url") or url,
+            "url": item.get("url") or url,
+            "title": item.get("title") or item.get("name") or _domain_from_url(url),
+        }
+
+        await emitter(
+            {
+                "type": "citation",
+                "data": {
+                    "document": [content],
+                    "metadata": [metadata],
+                    "source": {
+                        "name": metadata.get("title") or metadata.get("source") or url
+                    },
+                },
+            }
+        )
+
+        await emit_status(
+            f"read webpage from {domain}",
+            status="complete",
+            emitter=emitter,
+            extra_data={"url": url},
+        )
+
+        return json.dumps(
+            {
+                "status": "success",
+                "url": url,
+                "content": content,
+                "documents": [{"content": content, "metadata": metadata}],
+            }
+        )
+
+    except Exception as e:
+        await emit_status(
+            "failed to read webpage",
+            status="error",
+            emitter=emitter,
+            error=True,
+        )
+        return json.dumps(
+            {
+                "status": "error",
+                "url": url,
+                "error": str(e),
+            }
+        )
+
+
+async def jina_reader_fetch_url(
+    url: str,
+    emitter: Any,
+    api_key: Optional[str],
+    base_url: str,
+) -> str:
+    try:
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc or parsed_url.path.split("/")[0]
+
+        await emit_status(
+            f"browsing {domain}",
+            status="in_progress",
+            emitter=emitter,
+            done=False,
+        )
+
+        endpoint = _build_jina_reader_url(base_url, url)
+        headers: dict[str, str] = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(endpoint, headers=headers)
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            if "application/json" in content_type.lower():
+                data = response.json()
+                content = (
+                    data.get("data")
+                    or data.get("content")
+                    or data.get("text")
+                    or json.dumps(data)
+                )
+            else:
+                content = response.text
+
+        metadata = {
+            "source": url,
+            "url": url,
+            "title": _domain_from_url(url),
+        }
+
+        await emitter(
+            {
+                "type": "citation",
+                "data": {
+                    "document": [content],
+                    "metadata": [metadata],
+                    "source": {
+                        "name": metadata.get("title") or metadata.get("source") or url
+                    },
+                },
+            }
+        )
+
+        await emit_status(
+            f"read webpage from {domain}",
+            status="complete",
+            emitter=emitter,
+            extra_data={"url": url},
+        )
+
+        return json.dumps(
+            {
+                "status": "success",
+                "url": url,
+                "content": content,
+                "documents": [{"content": content, "metadata": metadata}],
+            }
+        )
+
+    except Exception as e:
+        await emit_status(
+            "failed to read webpage",
+            status="error",
+            emitter=emitter,
+            error=True,
+        )
+        return json.dumps(
+            {
+                "status": "error",
+                "url": url,
+                "error": str(e),
+            }
+        )
+
+
 async def web_search_with_provider(
     search_queries: list[str],
     emitter: Any,
@@ -603,8 +883,16 @@ async def web_search_with_provider(
     tavily_base_url: str = "https://api.tavily.com",
     tavily_search_depth: str = "basic",
     tavily_max_results: int = 5,
+    exa_api_key: Optional[str] = None,
+    exa_base_url: str = "https://api.exa.ai",
+    exa_max_results: int = 5,
+    jina_api_key: Optional[str] = None,
+    jina_search_base_url: str = "https://s.jina.ai",
+    jina_search_max_results: int = 5,
 ) -> str:
-    selected = _select_search_provider(provider, tavily_api_key)
+    selected = _select_search_provider(
+        provider, tavily_api_key, exa_api_key, jina_api_key
+    )
     if selected == "tavily":
         return await tavily_web_search(
             search_queries=search_queries,
@@ -613,6 +901,22 @@ async def web_search_with_provider(
             base_url=tavily_base_url,
             search_depth=tavily_search_depth,
             max_results=tavily_max_results,
+        )
+    if selected == "exa":
+        return await exa_web_search(
+            search_queries=search_queries,
+            emitter=emitter,
+            api_key=exa_api_key,
+            base_url=exa_base_url,
+            max_results=exa_max_results,
+        )
+    if selected == "jina_search":
+        return await jina_web_search(
+            search_queries=search_queries,
+            emitter=emitter,
+            api_key=jina_api_key,
+            base_url=jina_search_base_url,
+            max_results=jina_search_max_results,
         )
     return await native_web_search(
         search_queries=search_queries,
@@ -658,6 +962,182 @@ async def tavily_web_search(
                 items = data.get("results") if isinstance(data, dict) else None
                 if isinstance(items, list):
                     results.extend(items)
+
+        search_results = [_normalize_search_item(it) for it in results if it]
+        await _emit_search_citations(search_results, emitter)
+
+        await emit_status(
+            f"searched {len(search_results)} website{'s' if len(search_results) != 1 else ''}",
+            status="web_search",
+            done=True,
+            extra_data={
+                "urls": [sr["url"] for sr in search_results],
+                "items": [
+                    {
+                        "title": sr["name"],
+                        "link": sr["url"],
+                        "url": sr["url"],
+                        "source": sr["url"],
+                    }
+                    for sr in search_results
+                ],
+            },
+            emitter=emitter,
+        )
+
+        return json.dumps(
+            {
+                "status": "web search completed successfully!",
+                "result_count": len(search_results),
+                "results": search_results,
+            }
+        )
+
+    except Exception as e:
+        await emit_status(
+            f"encountered an error while searching the web: {str(e)}",
+            status="error",
+            done=True,
+            error=True,
+            emitter=emitter,
+        )
+        return json.dumps(
+            {
+                "status": "web search failed",
+                "error": str(e),
+            }
+        )
+
+
+async def exa_web_search(
+    search_queries: list[str],
+    emitter: Any,
+    api_key: str,
+    base_url: str,
+    max_results: int,
+) -> str:
+    try:
+        await emit_status(
+            "searching the web",
+            extra_data={"queries": search_queries},
+            status="web_search_queries_generated",
+            done=False,
+            emitter=emitter,
+        )
+
+        endpoint = f"{base_url}/search"
+        results: list[dict[str, Any]] = []
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for query in search_queries:
+                payload = {
+                    "query": query,
+                    "num_results": max_results,
+                    "text": True,
+                    "use_autoprompt": True,
+                }
+                response = await client.post(endpoint, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                items = data.get("results") if isinstance(data, dict) else None
+                if isinstance(items, list):
+                    results.extend(items)
+
+        search_results = [_normalize_search_item(it) for it in results if it]
+        await _emit_search_citations(search_results, emitter)
+
+        await emit_status(
+            f"searched {len(search_results)} website{'s' if len(search_results) != 1 else ''}",
+            status="web_search",
+            done=True,
+            extra_data={
+                "urls": [sr["url"] for sr in search_results],
+                "items": [
+                    {
+                        "title": sr["name"],
+                        "link": sr["url"],
+                        "url": sr["url"],
+                        "source": sr["url"],
+                    }
+                    for sr in search_results
+                ],
+            },
+            emitter=emitter,
+        )
+
+        return json.dumps(
+            {
+                "status": "web search completed successfully!",
+                "result_count": len(search_results),
+                "results": search_results,
+            }
+        )
+
+    except Exception as e:
+        await emit_status(
+            f"encountered an error while searching the web: {str(e)}",
+            status="error",
+            done=True,
+            error=True,
+            emitter=emitter,
+        )
+        return json.dumps(
+            {
+                "status": "web search failed",
+                "error": str(e),
+            }
+        )
+
+
+async def jina_web_search(
+    search_queries: list[str],
+    emitter: Any,
+    api_key: Optional[str],
+    base_url: str,
+    max_results: int,
+) -> str:
+    try:
+        await emit_status(
+            "searching the web",
+            extra_data={"queries": search_queries},
+            status="web_search_queries_generated",
+            done=False,
+            emitter=emitter,
+        )
+
+        results: list[dict[str, Any]] = []
+        headers: dict[str, str] = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for query in search_queries:
+                endpoint, params = _build_jina_search_url(base_url, query)
+                if params:
+                    params.setdefault("limit", max_results)
+                response = await client.get(endpoint, params=params or None, headers=headers)
+                response.raise_for_status()
+                content_type = response.headers.get("content-type", "")
+                if "application/json" in content_type.lower():
+                    data = response.json()
+                    items: Any = None
+                    if isinstance(data, list):
+                        items = data
+                    elif isinstance(data, dict):
+                        items = data.get("results") or data.get("data") or data.get("items")
+                    if isinstance(items, dict):
+                        items = [items]
+                    if isinstance(items, list):
+                        results.extend(items)
+                else:
+                    results.append(
+                        {
+                            "title": f"Jina Search: {query}",
+                            "url": endpoint,
+                            "text": response.text,
+                        }
+                    )
 
         search_results = [_normalize_search_item(it) for it in results if it]
         await _emit_search_citations(search_results, emitter)
