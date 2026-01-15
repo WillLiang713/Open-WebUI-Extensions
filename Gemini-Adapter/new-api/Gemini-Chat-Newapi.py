@@ -45,10 +45,6 @@ class Pipe:
 
     class UserValves(BaseModel):
         enable_reasoning: bool = Field(default=True, title="展示思考内容")
-        enable_google_search: bool = Field(
-            default=True, title="启用谷歌原生搜索",
-            description="建议默认启用谷歌原生搜索；如需进行工具调用，请确保上游支持 Function Calling。开启谷歌原生搜索时，建议关闭工具调用",
-        )
         reasoning_effort_flash: Literal["minimal", "low", "medium", "high"] = Field(
             default="high",
             title="Flash 推理强度",
@@ -341,14 +337,6 @@ class Pipe:
         }
 
         tools_param = list(body.get("tools") or [])
-        if user_valves.enable_google_search:
-            has_search = any(
-                isinstance(tool, dict)
-                and ("googleSearch" in tool or "google_search" in tool)
-                for tool in tools_param
-            )
-            if not has_search:
-                tools_param.append({"googleSearch": {}})
         functions_param = body.get("functions", [])
         gemini_tools = self._convert_tools(tools_param, functions_param)
         has_google_search = any(
