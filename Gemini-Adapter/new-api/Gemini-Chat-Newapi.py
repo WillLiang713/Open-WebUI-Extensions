@@ -44,7 +44,6 @@ class Pipe:
         proxy: Optional[str] = Field(default=None, title="代理地址")
 
     class UserValves(BaseModel):
-        enable_reasoning: bool = Field(default=True, title="展示思考内容")
         reasoning_effort_flash: Literal["minimal", "low", "medium", "high"] = Field(
             default="high",
             title="Flash 推理强度",
@@ -101,7 +100,7 @@ class Pipe:
                         return
 
                     # 按官方逻辑处理思考内容与正文
-                    is_thinking = user_valves.enable_reasoning
+                    is_thinking = True
                     tool_call_index = 0
                     total_tool_calls = 0
                     buffer = ""
