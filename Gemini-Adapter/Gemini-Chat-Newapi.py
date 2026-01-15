@@ -104,21 +104,39 @@ class Pipe:
                     is_thinking = user_valves.enable_reasoning
                     tool_call_index = 0
                     total_tool_calls = 0
+                    buffer = ""
                     if is_thinking:
                         yield self._format_data(
                             is_stream=True, model=model, content="<think>"
                         )
 
-                    async for line in response.aiter_lines():
-                        line = line.strip()
+                    async for raw_line in response.aiter_lines():
+                        line = raw_line.strip()
                         if not line:
+                            if buffer:
+                                try:
+                                    line = json.loads(buffer)
+                                    buffer = ""
+                                except json.JSONDecodeError:
+                                    buffer = ""
+                                    continue
+                            else:
+                                continue
+                        if isinstance(line, str) and (
+                            line.startswith("event:") or not line.startswith("data:")
+                        ):
                             continue
-                        if line.startswith("event:") or not line.startswith("data:"):
-                            continue
-                        if line.startswith("data: "):
-                            line = line[6:]
                         if isinstance(line, str):
-                            line = json.loads(line)
+                            data_line = line[5:].lstrip()
+                            if data_line == "[DONE]":
+                                break
+                            # Buffer SSE data lines to tolerate split JSON chunks.
+                            buffer += data_line
+                            try:
+                                line = json.loads(buffer)
+                                buffer = ""
+                            except json.JSONDecodeError:
+                                continue
 
                         for item in line.get("candidates", []):
                             content = item.get("content", {})
@@ -236,6 +254,10 @@ class Pipe:
                                     finish_reason="tool_calls",
                                     role="assistant",
                                 )
+                    if is_thinking:
+                        yield self._format_data(
+                            is_stream=True, model=model, content="</think>"
+                        )
 
         except Exception as err:
             logger.exception("[GeminiChatPipe] failed of %s", err)
