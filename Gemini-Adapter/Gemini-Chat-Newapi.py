@@ -45,6 +45,10 @@ class Pipe:
 
     class UserValves(BaseModel):
         enable_reasoning: bool = Field(default=True, title="展示思考内容")
+        enable_google_search: bool = Field(
+            default=True, title="启用谷歌原生搜索",
+            description="建议默认启用谷歌原生搜索；如需进行工具调用，请确保上游支持 Function Calling。开启谷歌原生搜索时，建议关闭工具调用",
+        )
         reasoning_effort_flash: Literal["minimal", "low", "medium", "high"] = Field(
             default="high",
             title="Flash 推理强度",
@@ -336,12 +340,34 @@ class Pipe:
             },
         }
 
-        tools_param = body.get("tools", [])
+        tools_param = list(body.get("tools") or [])
+        if user_valves.enable_google_search:
+            has_search = any(
+                isinstance(tool, dict)
+                and ("googleSearch" in tool or "google_search" in tool)
+                for tool in tools_param
+            )
+            if not has_search:
+                tools_param.append({"googleSearch": {}})
         functions_param = body.get("functions", [])
         gemini_tools = self._convert_tools(tools_param, functions_param)
+        has_google_search = any(
+            isinstance(tool, dict) and "googleSearch" in tool for tool in gemini_tools
+        )
+        has_function_decls = any(
+            isinstance(tool, dict) and "functionDeclarations" in tool
+            for tool in gemini_tools
+        )
+        if has_google_search and has_function_decls:
+            gemini_tools = [
+                tool for tool in gemini_tools if "googleSearch" in tool
+            ]
+            has_function_decls = False
         tool_choice = body.get("tool_choice") or body.get("function_call")
-        tool_config = self._convert_tool_config(tool_choice)
-        if gemini_tools and not tool_config:
+        tool_config = (
+            self._convert_tool_config(tool_choice) if has_function_decls else None
+        )
+        if has_function_decls and not tool_config:
             tool_config = {"functionCallingConfig": {"mode": "AUTO"}}
         if gemini_tools:
             payload["json"]["tools"] = gemini_tools
@@ -448,9 +474,16 @@ class Pipe:
     ) -> List[dict]:
         if not tools and not functions:
             return []
+        results: List[Dict[str, Any]] = []
         function_declarations: List[Dict[str, Any]] = []
         for tool in tools or []:
             if not tool:
+                continue
+            if tool.get("googleSearch") is not None or tool.get("google_search") is not None:
+                search_config = tool.get("googleSearch")
+                if search_config is None:
+                    search_config = tool.get("google_search")
+                results.append({"googleSearch": search_config or {}})
                 continue
             if tool.get("functionDeclarations"):
                 function_declarations.extend(tool.get("functionDeclarations") or [])
@@ -475,9 +508,9 @@ class Pipe:
                     "parameters": fn.get("parameters", {}),
                 }
             )
-        if not function_declarations:
-            return []
-        return [{"functionDeclarations": function_declarations}]
+        if function_declarations:
+            results.append({"functionDeclarations": function_declarations})
+        return results
 
     def _convert_tool_config(self, tool_choice: Optional[Any]) -> Optional[dict]:
         if not tool_choice:
