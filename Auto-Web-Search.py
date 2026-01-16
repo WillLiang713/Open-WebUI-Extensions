@@ -147,13 +147,14 @@ def _normalize_search_item(item: dict[str, Any]) -> dict[str, str]:
     url = item.get("link") or item.get("url") or ""
     title = item.get("title") or item.get("name") or ""
     content = item.get("snippet") or item.get("content") or item.get("text") or ""
+    favicon = item.get("favicon") or ""
 
     url = str(url)
     if url and not (url.startswith("http://") or url.startswith("https://")):
         url = ""
 
     name = title or (_domain_from_url(url) if url else "") or "unknown"
-    return {"name": str(name), "url": url, "content": str(content)}
+    return {"name": str(name), "url": url, "content": str(content), "favicon": str(favicon)}
 
 
 async def _emit_search_citations(
@@ -174,6 +175,7 @@ async def _emit_search_citations(
                             "link": sr["url"],
                             "title": sr["name"],
                             "name": sr["name"],
+                            "favicon": sr.get("favicon", ""),
                         }
                     ],
                     "source": {
@@ -960,6 +962,7 @@ async def tavily_web_search(
                     "include_answer": False,
                     "include_images": False,
                     "include_raw_content": False,
+                    "include_favicon": True,
                     "max_results": max_results,
                 }
                 response = await client.post(endpoint, json=payload, headers=headers)
@@ -1106,6 +1109,44 @@ async def jina_web_search(
     base_url: str,
     max_results: int,
 ) -> str:
+    import re
+    
+    def _parse_jina_text_response(text: str) -> list[dict[str, Any]]:
+        """解析 Jina 返回的文本格式响应"""
+        items: list[dict[str, Any]] = []
+        # 按 Title: 分割，每个块代表一个搜索结果
+        blocks = re.split(r'\n(?=Title:)', text.strip())
+        
+        for block in blocks:
+            if not block.strip():
+                continue
+            item: dict[str, Any] = {}
+            
+            # 解析 Title
+            title_match = re.search(r'Title:\s*(.+?)(?:\n|$)', block)
+            if title_match:
+                item["title"] = title_match.group(1).strip()
+            
+            # 解析 URL Source (格式: [n] URL Source: https://...)
+            url_match = re.search(r'\[\d+\]\s*URL Source:\s*(.+?)(?:\n|$)', block)
+            if url_match:
+                item["url"] = url_match.group(1).strip()
+            
+            # 解析 Description
+            desc_match = re.search(r'\[\d+\]\s*Description:\s*(.+?)(?:\n|$)', block)
+            if desc_match:
+                item["content"] = desc_match.group(1).strip()
+            
+            # 解析 Favicon
+            favicon_match = re.search(r'\[\d+\]\s*Favicon:\s*(.+?)(?:\n|$)', block)
+            if favicon_match:
+                item["favicon"] = favicon_match.group(1).strip()
+            
+            if item.get("url") or item.get("title"):
+                items.append(item)
+        
+        return items
+    
     try:
         await emit_status(
             "searching the web",
@@ -1116,7 +1157,9 @@ async def jina_web_search(
         )
 
         results: list[dict[str, Any]] = []
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {
+            "X-With-Favicons": "true",
+        }
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
@@ -1140,13 +1183,19 @@ async def jina_web_search(
                     if isinstance(items, list):
                         results.extend(items)
                 else:
-                    results.append(
-                        {
-                            "title": f"Jina Search: {query}",
-                            "url": endpoint,
-                            "text": response.text,
-                        }
-                    )
+                    # 解析 Jina 文本格式响应
+                    parsed_items = _parse_jina_text_response(response.text)
+                    if parsed_items:
+                        results.extend(parsed_items)
+                    else:
+                        # 回退：作为单个结果处理
+                        results.append(
+                            {
+                                "title": f"Jina Search: {query}",
+                                "url": endpoint,
+                                "text": response.text,
+                            }
+                        )
 
         search_results = [_normalize_search_item(it) for it in results if it]
         await _emit_search_citations(search_results, emitter)
