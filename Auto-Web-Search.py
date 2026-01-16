@@ -626,14 +626,13 @@ async def tavily_fetch_url(
 
         endpoint = f"{base_url}/extract"
         payload = {
-            "api_key": api_key,
             "urls": [url],
             "include_images": False,
-            "include_raw_content": False,
         }
+        headers = {"Authorization": f"Bearer {api_key}"}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(endpoint, json=payload)
+            response = await client.post(endpoint, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
 
@@ -953,9 +952,9 @@ async def tavily_web_search(
         results: list[dict[str, Any]] = []
 
         async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {"Authorization": f"Bearer {api_key}"}
             for query in search_queries:
                 payload = {
-                    "api_key": api_key,
                     "query": query,
                     "search_depth": search_depth,
                     "include_answer": False,
@@ -963,7 +962,7 @@ async def tavily_web_search(
                     "include_raw_content": False,
                     "max_results": max_results,
                 }
-                response = await client.post(endpoint, json=payload)
+                response = await client.post(endpoint, json=payload, headers=headers)
                 response.raise_for_status()
                 data = response.json()
                 items = data.get("results") if isinstance(data, dict) else None
@@ -1125,7 +1124,7 @@ async def jina_web_search(
             for query in search_queries:
                 endpoint, params = _build_jina_search_url(base_url, query)
                 if params:
-                    params.setdefault("limit", max_results)
+                    params.setdefault("num", max_results)
                 response = await client.get(endpoint, params=params or None, headers=headers)
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "")
