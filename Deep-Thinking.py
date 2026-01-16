@@ -33,9 +33,7 @@ class Filter:
         body: dict,
         __user__: Optional[dict] = None,
     ) -> dict:
-        # GLM 格式
         body["thinking"] = {"type": "enabled"}
-        # Qwen 格式
         body["enable_thinking"] = True
         return body
 

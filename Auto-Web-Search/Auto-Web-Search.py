@@ -3,12 +3,13 @@ title: Auto-Web-Search
 author: @WillLiang713
 description: A tool for performing automated web searches.
 repository_url: https://github.com/WillLiang713/OpenWebUI-Auto-Web-Search
-version: 1.0.0
+version: 2.0.0
 required_open_webui_version: >= 0.6.0
 """
 
 import json
 import os
+from datetime import datetime
 from typing import Any, Literal, Optional, cast
 from urllib.parse import urlparse
 
@@ -147,14 +148,14 @@ def _normalize_search_item(item: dict[str, Any]) -> dict[str, str]:
     url = item.get("link") or item.get("url") or ""
     title = item.get("title") or item.get("name") or ""
     content = item.get("snippet") or item.get("content") or item.get("text") or ""
-    favicon = item.get("favicon") or ""
 
     url = str(url)
     if url and not (url.startswith("http://") or url.startswith("https://")):
         url = ""
 
     name = title or (_domain_from_url(url) if url else "") or "unknown"
-    return {"name": str(name), "url": url, "content": str(content), "favicon": str(favicon)}
+    return {"name": str(name), "url": url, "content": str(content)}
+
 
 
 async def _emit_search_citations(
@@ -170,12 +171,8 @@ async def _emit_search_citations(
                     "document": [sr["content"]],
                     "metadata": [
                         {
-                            "source": sr["url"],
-                            "url": sr["url"],
-                            "link": sr["url"],
-                            "title": sr["name"],
-                            "name": sr["name"],
-                            "favicon": sr.get("favicon", ""),
+                            "date_accessed": datetime.now().isoformat(),
+                            "source": sr["name"],
                         }
                     ],
                     "source": {
@@ -346,6 +343,7 @@ class Tools:
             ),
             jina_search_max_results=self.valves.jina_search_max_results,
         )
+
 
     async def fetch_url_content(
         self,
@@ -962,7 +960,6 @@ async def tavily_web_search(
                     "include_answer": False,
                     "include_images": False,
                     "include_raw_content": False,
-                    "include_favicon": True,
                     "max_results": max_results,
                 }
                 response = await client.post(endpoint, json=payload, headers=headers)
@@ -1025,6 +1022,9 @@ async def exa_web_search(
     base_url: str,
     max_results: int,
     search_type: str = "auto",
+    favicon_mode: str = "url",
+    favicon_fetch_timeout: float = 3.0,
+    favicon_max_bytes: int = 60000,
 ) -> str:
     try:
         await emit_status(
@@ -1057,6 +1057,12 @@ async def exa_web_search(
                     results.extend(items)
 
         search_results = [_normalize_search_item(it) for it in results if it]
+        await _maybe_convert_favicons(
+            search_results,
+            mode=favicon_mode,
+            timeout=favicon_fetch_timeout,
+            max_bytes=favicon_max_bytes,
+        )
         await _emit_search_citations(search_results, emitter)
 
         await emit_status(
@@ -1108,6 +1114,9 @@ async def jina_web_search(
     api_key: Optional[str],
     base_url: str,
     max_results: int,
+    favicon_mode: str = "url",
+    favicon_fetch_timeout: float = 3.0,
+    favicon_max_bytes: int = 60000,
 ) -> str:
     import re
     
@@ -1198,6 +1207,12 @@ async def jina_web_search(
                         )
 
         search_results = [_normalize_search_item(it) for it in results if it]
+        await _maybe_convert_favicons(
+            search_results,
+            mode=favicon_mode,
+            timeout=favicon_fetch_timeout,
+            max_bytes=favicon_max_bytes,
+        )
         await _emit_search_citations(search_results, emitter)
 
         await emit_status(
@@ -1244,7 +1259,12 @@ async def jina_web_search(
 
 
 async def native_web_search(
-    search_queries: list[str], emitter: Any, user: UserModel
+    search_queries: list[str],
+    emitter: Any,
+    user: UserModel,
+    favicon_mode: str = "url",
+    favicon_fetch_timeout: float = 3.0,
+    favicon_max_bytes: int = 60000,
 ) -> str:
     """Search using the native search engine."""
     try:
@@ -1266,6 +1286,12 @@ async def native_web_search(
         )
 
         search_results = [_normalize_search_item(it) for it in items if it]
+        await _maybe_convert_favicons(
+            search_results,
+            mode=favicon_mode,
+            timeout=favicon_fetch_timeout,
+            max_bytes=favicon_max_bytes,
+        )
         await _emit_search_citations(search_results, emitter)
         await emit_status(
             f"searched {len(search_results)} website{'s' if len(search_results) != 1 else ''}",
