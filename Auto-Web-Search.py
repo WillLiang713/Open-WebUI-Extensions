@@ -224,6 +224,10 @@ class Tools:
         exa_max_results: int = Field(
             default=3, ge=1, le=10, description="Max results per query for Exa."
         )
+        exa_search_type: str = Field(
+            default="auto",
+            description="Exa search type: auto, neural, fast, or deep.",
+        )
         jina_api_key: Optional[str] = Field(default=None, description="API key for Jina.")
         jina_search_base_url: str = Field(
             default="https://s.jina.ai",
@@ -331,6 +335,7 @@ class Tools:
                 "https://api.exa.ai",
             ),
             exa_max_results=self.valves.exa_max_results,
+            exa_search_type=self.valves.exa_search_type,
             jina_api_key=_resolve_key(self.valves.jina_api_key, "JINA_API_KEY"),
             jina_search_base_url=_resolve_base_url(
                 self.valves.jina_search_base_url,
@@ -710,7 +715,7 @@ async def exa_fetch_url(
 
         endpoint = f"{base_url}/contents"
         payload = {"urls": [url], "text": True}
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = {"x-api-key": api_key}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(endpoint, json=payload, headers=headers)
@@ -886,6 +891,7 @@ async def web_search_with_provider(
     exa_api_key: Optional[str] = None,
     exa_base_url: str = "https://api.exa.ai",
     exa_max_results: int = 5,
+    exa_search_type: str = "auto",
     jina_api_key: Optional[str] = None,
     jina_search_base_url: str = "https://s.jina.ai",
     jina_search_max_results: int = 5,
@@ -909,6 +915,7 @@ async def web_search_with_provider(
             api_key=exa_api_key,
             base_url=exa_base_url,
             max_results=exa_max_results,
+            search_type=exa_search_type,
         )
     if selected == "jina_search":
         return await jina_web_search(
@@ -1015,6 +1022,7 @@ async def exa_web_search(
     api_key: str,
     base_url: str,
     max_results: int,
+    search_type: str = "auto",
 ) -> str:
     try:
         await emit_status(
@@ -1027,15 +1035,17 @@ async def exa_web_search(
 
         endpoint = f"{base_url}/search"
         results: list[dict[str, Any]] = []
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = {"x-api-key": api_key}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             for query in search_queries:
                 payload = {
                     "query": query,
-                    "num_results": max_results,
-                    "text": True,
-                    "use_autoprompt": True,
+                    "type": search_type,
+                    "numResults": max_results,
+                    "contents": {
+                        "text": True,
+                    },
                 }
                 response = await client.post(endpoint, json=payload, headers=headers)
                 response.raise_for_status()
