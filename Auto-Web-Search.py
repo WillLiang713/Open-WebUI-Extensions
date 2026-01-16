@@ -214,7 +214,7 @@ class Tools:
             description="Tavily search depth (basic or advanced).",
         )
         tavily_max_results: int = Field(
-            default=5, ge=1, le=10, description="Max results per query for Tavily."
+            default=3, ge=1, le=10, description="Max results per query for Tavily."
         )
         exa_api_key: Optional[str] = Field(default=None, description="API key for Exa.")
         exa_base_url: str = Field(
@@ -222,7 +222,7 @@ class Tools:
             description="Exa base URL.",
         )
         exa_max_results: int = Field(
-            default=5, ge=1, le=10, description="Max results per query for Exa."
+            default=3, ge=1, le=10, description="Max results per query for Exa."
         )
         jina_api_key: Optional[str] = Field(default=None, description="API key for Jina.")
         jina_search_base_url: str = Field(
@@ -230,7 +230,7 @@ class Tools:
             description="Jina Search base URL.",
         )
         jina_search_max_results: int = Field(
-            default=5, ge=1, le=10, description="Max results per query for Jina Search."
+            default=3, ge=1, le=10, description="Max results per query for Jina Search."
         )
         jina_reader_base_url: str = Field(
             default="https://r.jina.ai",
