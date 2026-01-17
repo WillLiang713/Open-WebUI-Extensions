@@ -1,8 +1,8 @@
 """
 title: OpenRouter Inference Control
 author: Open-WebUI-Extensions
-description: 为 OpenRouter 的 GPT-5 系列模型提供思考强度控制
-version: 0.0.1
+description: 为 OpenRouter 的 GPT-5 / Gemini 3 系列推理模型提供思考强度控制
+version: 0.0.3
 licence: MIT
 """
 
@@ -27,7 +27,7 @@ class Pipe:
         models: str = Field(
             default="openai/gpt-5.2",
             title="模型",
-            description="使用英文逗号分隔多个模型，例如 openai/gpt-5.2,openai/gpt-5.2-mini",
+            description="使用英文逗号分隔多个模型，例如 openai/gpt-5.2,google/gemini-3-pro",
         )
         base_url: str = Field(
             default="https://openrouter.ai/api/v1",
