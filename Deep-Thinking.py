@@ -44,6 +44,9 @@ class Filter:
             "type": "enabled",
             "budget_tokens": budget_tokens
         }
-        body["enable_thinking"] = True
+        body["enable_thinking"] = {
+            "type": "enabled",
+            "budget_tokens": budget_tokens
+        }
         return body
 
