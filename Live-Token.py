@@ -30,6 +30,20 @@ def debug_print(msg: str):
         print("[TOKEN TRACKER DEBUG] " + msg)
 
 
+def format_number(n: int) -> str:
+    """Format number with thousand separators."""
+    return f"{n:,}"
+
+
+def format_time(seconds: float) -> str:
+    """Format time: show as 'm s' if >= 60s, otherwise just 's'."""
+    if seconds >= 60:
+        mins = int(seconds // 60)
+        secs = seconds % 60
+        return f"{mins}m {secs:.1f}s"
+    return f"{seconds:.2f}s"
+
+
 def get_encoding_for_model(model_name: str):
     """
     Safely get a tiktoken encoding for the given model_name,
@@ -149,7 +163,7 @@ class Filter:
                 {
                     "type": "status",
                     "data": {
-                        "description": f"Input tokens: {self.input_tokens}",
+                        "description": f"Input: {format_number(self.input_tokens)} T | Processing...",
                         "done": False,
                     },
                 }
@@ -187,11 +201,13 @@ class Filter:
 
         stats_list = []
         if self.valves.show_elapsed_time:
-            stats_list.append(f"{elapsed:.2f} s")
+            stats_list.append(format_time(elapsed))
         if self.valves.show_tokens_per_second:
-            stats_list.append(f"{tokens_per_sec:.2f} T/s")
+            stats_list.append(f"{tokens_per_sec:.1f} T/s")
         if self.valves.show_tokens:
-            stats_list.append(f"{total_tokens} Tokens")
+            stats_list.append(
+                f"{format_number(self.input_tokens)} + {format_number(output_tokens)} = {format_number(total_tokens)} T"
+            )
 
         stats_string = " | ".join(stats_list)
 
