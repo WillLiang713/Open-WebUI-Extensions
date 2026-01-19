@@ -1,10 +1,9 @@
 """
 title: Max Turns Filter
-author: OVINC CN
+author: WillLiang713
 git_url: https://github.com/WillLiang713/Open-WebUI-Extensions
 description: Max Turns Filter
 version: 0.0.1
-licence: MIT
 """
 
 import logging

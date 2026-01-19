@@ -1,10 +1,9 @@
 """
 title: Claude Messages
 description: Claude API Pipe，支持思考模式、图片输入、Beta工具（代码执行/网页抓取）
-author: OVINC CN
+author: WillLiang713
 git_url: https://github.com/WillLiang713/Open-WebUI-Extensions
 version: 0.0.3
-licence: MIT
 """
 
 import json
