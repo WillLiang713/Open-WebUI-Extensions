@@ -2,7 +2,7 @@
 title: Auto-Web-Search
 author: @WillLiang713
 description: A tool for performing automated web searches.
-repository_url: https://github.com/WillLiang713/OpenWebUI-Auto-Web-Search
+repository_url: https://github.com/WillLiang713/Open-WebUI-Extensions
 version: 2.0.0
 required_open_webui_version: >= 0.6.0
 """

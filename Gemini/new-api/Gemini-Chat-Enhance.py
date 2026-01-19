@@ -2,7 +2,7 @@
 title: Gemini Chat Enhance
 description: Text generation with Gemini
 author: OVINC CN
-git_url: https://github.com/OVINC-CN/OpenWebUIPlugin.git
+git_url: https://github.com/WillLiang713/Open-WebUI-Extensions
 version: 0.0.8
 licence: MIT
 """
