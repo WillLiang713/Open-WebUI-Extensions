@@ -13,7 +13,8 @@ from pydantic import BaseModel, Field
 
 class Filter:
     class Valves(BaseModel):
-        priority: int = Field(default=0, description="filter priority")
+        priority: int = Field(default=0, description="Filter priority")
+        budget_tokens: int = Field(default=8192, description="Thinking token budget (minimum 1024)")
 
     def __init__(self):
         self.valves = self.Valves()
@@ -33,7 +34,10 @@ class Filter:
         body: dict,
         __user__: Optional[dict] = None,
     ) -> dict:
-        body["thinking"] = {"type": "enabled"}
+        body["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": self.valves.budget_tokens
+        }
         body["enable_thinking"] = True
         return body
 
