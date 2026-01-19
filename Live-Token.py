@@ -30,8 +30,8 @@ def debug_print(msg: str):
 
 
 def format_number(n: int) -> str:
-    """Format number with thousand separators."""
-    return f"{n:,}"
+    """Format number without separators for cleaner display."""
+    return str(n)
 
 
 def format_time(seconds: float) -> str:
@@ -164,7 +164,7 @@ class Filter:
                 {
                     "type": "status",
                     "data": {
-                        "description": f"Input: {format_number(self.input_tokens)} T | Processing...",
+                        "description": f"input: {format_number(self.input_tokens)}",
                         "done": False,
                     },
                 }
@@ -220,18 +220,15 @@ class Filter:
         total_tokens = input_tokens + output_tokens
         tokens_per_sec = output_tokens / elapsed if elapsed > 0 else 0.0
 
-        # 构建统计信息字符串
-        # 如果是估算值，添加 ~ 前缀表示
-        estimate_prefix = "~" if is_estimated else ""
-
+        # 构建统计信息字符串（简洁风格）
         stats_list = []
         if self.valves.show_elapsed_time:
             stats_list.append(format_time(elapsed))
         if self.valves.show_tokens_per_second:
-            stats_list.append(f"{estimate_prefix}{tokens_per_sec:.1f} T/s")
+            stats_list.append(f"{tokens_per_sec:.1f}/s")
         if self.valves.show_tokens:
             stats_list.append(
-                f"{estimate_prefix}{format_number(input_tokens)} + {format_number(output_tokens)} = {format_number(total_tokens)} T"
+                f"{format_number(input_tokens)} + {format_number(output_tokens)} = {format_number(total_tokens)}"
             )
 
         stats_string = " | ".join(stats_list)
