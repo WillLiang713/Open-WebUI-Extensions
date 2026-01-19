@@ -1,5 +1,6 @@
 """
 title: Claude Messages
+description: Claude API Pipe，支持思考模式、图片输入、Beta工具（代码执行/网页抓取）
 author: OVINC CN
 git_url: https://github.com/OVINC-CN/OpenWebUIPlugin.git
 version: 0.0.3
@@ -230,11 +231,26 @@ class Pipe:
         beta_headers = []
         beta_tools = [i.strip().split("/", 1) for i in self.valves.beta_tools.split(",") if i.strip()]
         if body.get("tools", []):
-            payload["json"]["tools"] = body["tools"]
+            # 转换 OpenAI 格式的 tools 到 Claude 格式
+            claude_tools = []
             for tool in body["tools"]:
+                if tool.get("type") == "function" and "function" in tool:
+                    # OpenAI 格式转 Claude 格式
+                    func = tool["function"]
+                    claude_tools.append({
+                        "name": func.get("name"),
+                        "description": func.get("description", ""),
+                        "input_schema": func.get("parameters", {})
+                    })
+                else:
+                    # 已经是 Claude 格式或其他格式（如 beta tools）
+                    claude_tools.append(tool)
+                # 检查 beta tools
+                tool_type = tool.get("type")
                 for beta_tool, header in beta_tools:
-                    if beta_tool == tool.get("type"):
+                    if beta_tool == tool_type:
                         beta_headers.append(header)
+            payload["json"]["tools"] = claude_tools
         if beta_headers:
             payload["headers"] = {"anthropic-beta": ",".join(beta_headers)}
 
