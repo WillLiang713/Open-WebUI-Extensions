@@ -164,7 +164,7 @@ class Filter:
                 {
                     "type": "status",
                     "data": {
-                        "description": f"input: {format_number(self.input_tokens)}",
+                        "description": f"Prompt Tokens: {format_number(self.input_tokens)}",
                         "done": False,
                     },
                 }
@@ -228,7 +228,7 @@ class Filter:
             stats_list.append(f"{tokens_per_sec:.1f}/s")
         if self.valves.show_tokens:
             stats_list.append(
-                f"{format_number(input_tokens)} + {format_number(output_tokens)} = {format_number(total_tokens)}"
+                f"Prompt: {format_number(input_tokens)} | Completion: {format_number(output_tokens)} | Total: {format_number(total_tokens)}"
             )
 
         stats_string = " | ".join(stats_list)
