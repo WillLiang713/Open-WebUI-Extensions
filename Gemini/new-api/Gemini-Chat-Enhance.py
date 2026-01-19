@@ -1,5 +1,5 @@
 """
-title: Gemini Chat
+title: Gemini Chat Enhance
 description: Text generation with Gemini
 author: OVINC CN
 git_url: https://github.com/OVINC-CN/OpenWebUIPlugin.git
