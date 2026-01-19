@@ -3,7 +3,7 @@ title: Live Token Tracker when Chatting
 description: Tracks token usage and timing for the Chat (supports multimodal content)
 authors: WillLiang713 (patched by ChatGPT)
 funding_url: https://github.com/open-webui
-version: 1.0.1
+version: 1.1.0
 license: MIT
 requirements: tiktoken, pydantic
 environment_variables:
@@ -61,6 +61,7 @@ class Filter:
         show_elapsed_time: bool = True
         show_tokens: bool = True
         show_tokens_per_second: bool = True
+        prefer_api_usage: bool = True  # 优先使用 API 返回的 usage 数据
         debug: bool = False
         # Optional valve to count images as placeholder
         count_images_as_placeholder: bool = False
@@ -71,6 +72,7 @@ class Filter:
         Config.COUNT_IMAGES_AS_PLACEHOLDER = self.valves.count_images_as_placeholder
 
         self.input_tokens = 0
+        self.input_tokens_estimated = True  # 是否为估算值
         self.start_time = None
 
     def _remove_roles(self, text: str) -> str:
@@ -181,32 +183,56 @@ class Filter:
     ) -> dict:
         """
         Called after the generation step:
-         - Count output tokens
+         - Count output tokens (prefer API usage if available)
          - Emit stats
         """
         end_time = time.time()
         elapsed = end_time - self.start_time if self.start_time else 0.0
 
-        # Some pipelines return the full message list; others may return only the assistant message.
-        # We'll follow your original approach: use the last message in body["messages"].
-        messages = body.get("messages", [])
-        last_msg_raw = messages[-1].get("content", "") if messages else ""
-        last_msg_text = self._content_to_text(last_msg_raw)
+        # 尝试从 API 返回的 usage 数据中读取 token 数量
+        usage = body.get("usage", {})
+        input_tokens = 0
+        output_tokens = 0
+        is_estimated = True
 
-        enc = get_encoding_for_model(body.get("model", "unknown-model"))
-        output_tokens = len(enc.encode(last_msg_text))
+        if self.valves.prefer_api_usage and usage:
+            # 优先使用 API 返回的真实数据
+            api_prompt_tokens = usage.get("prompt_tokens", 0)
+            api_completion_tokens = usage.get("completion_tokens", 0)
+            
+            if api_prompt_tokens > 0 or api_completion_tokens > 0:
+                input_tokens = api_prompt_tokens
+                output_tokens = api_completion_tokens
+                is_estimated = False
+                debug_print(f"Using API usage: prompt={input_tokens}, completion={output_tokens}")
 
-        total_tokens = self.input_tokens + output_tokens
+        # 如果没有 API 数据，回退到 tiktoken 估算
+        if is_estimated:
+            input_tokens = self.input_tokens
+            
+            messages = body.get("messages", [])
+            last_msg_raw = messages[-1].get("content", "") if messages else ""
+            last_msg_text = self._content_to_text(last_msg_raw)
+
+            enc = get_encoding_for_model(body.get("model", "unknown-model"))
+            output_tokens = len(enc.encode(last_msg_text))
+            debug_print(f"Using tiktoken estimation: input={input_tokens}, output={output_tokens}")
+
+        total_tokens = input_tokens + output_tokens
         tokens_per_sec = output_tokens / elapsed if elapsed > 0 else 0.0
+
+        # 构建统计信息字符串
+        # 如果是估算值，添加 ~ 前缀表示
+        estimate_prefix = "~" if is_estimated else ""
 
         stats_list = []
         if self.valves.show_elapsed_time:
             stats_list.append(format_time(elapsed))
         if self.valves.show_tokens_per_second:
-            stats_list.append(f"{tokens_per_sec:.1f} T/s")
+            stats_list.append(f"{estimate_prefix}{tokens_per_sec:.1f} T/s")
         if self.valves.show_tokens:
             stats_list.append(
-                f"{format_number(self.input_tokens)} + {format_number(output_tokens)} = {format_number(total_tokens)} T"
+                f"{estimate_prefix}{format_number(input_tokens)} + {format_number(output_tokens)} = {format_number(total_tokens)} T"
             )
 
         stats_string = " | ".join(stats_list)
