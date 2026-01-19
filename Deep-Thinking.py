@@ -2,7 +2,7 @@
 title: 开启深度思考
 author: Open-WebUI-Extensions
 description: 开启深度思考模式
-version: 0.0.4
+version: 0.0.5
 licence: MIT
 """
 
@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 class Filter:
     class Valves(BaseModel):
         priority: int = Field(default=0, description="Filter priority")
+
+    class UserValves(BaseModel):
         budget_tokens: int = Field(default=8192, description="Thinking token budget (minimum 1024)")
 
     def __init__(self):
@@ -34,9 +36,13 @@ class Filter:
         body: dict,
         __user__: Optional[dict] = None,
     ) -> dict:
+        # 获取用户配置的 budget_tokens
+        user_valves = __user__.get("valves") if __user__ else None
+        budget_tokens = user_valves.budget_tokens if user_valves else 8192
+
         body["thinking"] = {
             "type": "enabled",
-            "budget_tokens": self.valves.budget_tokens
+            "budget_tokens": budget_tokens
         }
         body["enable_thinking"] = True
         return body
