@@ -1,5 +1,5 @@
 """
-title: Live Token Tracker when Chatting
+title: Live Token
 description: Tracks token usage and timing for the Chat (supports multimodal content)
 author: WillLiang713
 git_url: https://github.com/WillLiang713/Open-WebUI-Extensions
@@ -164,7 +164,7 @@ class Filter:
                 {
                     "type": "status",
                     "data": {
-                        "description": f"Prompt Tokens: {format_number(self.input_tokens)}",
+                        "description": "Processing",
                         "done": False,
                     },
                 }
@@ -189,7 +189,13 @@ class Filter:
         elapsed = end_time - self.start_time if self.start_time else 0.0
 
         # 尝试从 API 返回的 usage 数据中读取 token 数量
+        # 先尝试从 body 顶层获取，再尝试从最后一条消息中获取
         usage = body.get("usage", {})
+        if not usage:
+            messages = body.get("messages", [])
+            if messages:
+                usage = messages[-1].get("usage", {})
+        
         input_tokens = 0
         output_tokens = 0
         is_estimated = True
@@ -227,9 +233,7 @@ class Filter:
         if self.valves.show_tokens_per_second:
             stats_list.append(f"{tokens_per_sec:.1f}/s")
         if self.valves.show_tokens:
-            stats_list.append(
-                f"Prompt: {format_number(input_tokens)} | Completion: {format_number(output_tokens)} | Total: {format_number(total_tokens)}"
-            )
+            stats_list.append(f"Total: {format_number(total_tokens)}")
 
         stats_string = " | ".join(stats_list)
 
