@@ -53,9 +53,9 @@ class Pipe:
         models: str = Field(
             default="gemini-3-pro-preview@https://generativelanguage.googleapis.com/v1beta/models",
             title="模型配置",
-            description="格式：模型ID@base_url，使用英文逗号分隔多个。例如：gemini-3-pro-preview@https://api1.com/v1beta/models,gemini-3-flash-preview@https://api2.com/v1beta/models",
+            description="格式：模型ID@base_url@api_key，api_key可选。例如：gemini-3-pro@https://api1.com/v1beta/models@sk-key1,gemini-3-flash@https://api2.com/v1beta/models@sk-key2",
         )
-        api_key: str = Field(default="", title="API Key")
+        api_key: Optional[str] = Field(default=None, title="默认 API Key", description="可选，未指定 api_key 的模型将使用此默认值")
         allow_params: Optional[str] = Field(
             default="",
             title="透传参数",
@@ -83,29 +83,39 @@ class Pipe:
 
     def __init__(self):
         self.valves = self.Valves()
-        self._model_url_map: Dict[str, str] = {}
+        self._model_config_map: Dict[str, Dict[str, str]] = {}
 
-    def _parse_model_config(self) -> Dict[str, str]:
-        """解析模型配置，返回模型ID到base_url的映射"""
-        model_url_map = {}
+    def _parse_model_config(self) -> Dict[str, Dict[str, str]]:
+        """解析模型配置，返回模型ID到{base_url, api_key}的映射"""
+        model_config_map = {}
         default_base_url = "https://generativelanguage.googleapis.com/v1beta/models"
         
         for item in self.valves.models.split(","):
             item = item.strip()
             if not item:
                 continue
-            if "@" in item:
-                model_id, base_url = item.rsplit("@", 1)
-                model_url_map[model_id.strip()] = base_url.strip()
+            
+            parts = item.split("@")
+            if len(parts) >= 3:
+                # 格式：模型ID@base_url@api_key
+                model_id = parts[0].strip()
+                base_url = parts[1].strip()
+                api_key = parts[2].strip()
+                model_config_map[model_id] = {"base_url": base_url, "api_key": api_key}
+            elif len(parts) == 2:
+                # 格式：模型ID@base_url（使用默认 api_key）
+                model_id = parts[0].strip()
+                base_url = parts[1].strip()
+                model_config_map[model_id] = {"base_url": base_url, "api_key": ""}
             else:
-                # 兼容旧格式：没有 @ 则使用默认 base_url
-                model_url_map[item] = default_base_url
+                # 兼容旧格式：只有模型ID
+                model_config_map[item] = {"base_url": default_base_url, "api_key": ""}
         
-        return model_url_map
+        return model_config_map
 
     def pipes(self):
-        self._model_url_map = self._parse_model_config()
-        return [{"id": model, "name": model} for model in self._model_url_map.keys()]
+        self._model_config_map = self._parse_model_config()
+        return [{"id": model, "name": model} for model in self._model_config_map.keys()]
 
     # ========================================================================
     # 入口方法
@@ -129,8 +139,15 @@ class Pipe:
         state = StreamState(model=model)
 
         try:
+            # 获取该模型对应的 api_key
+            model_name = body["model"].split(".", 1)[1]
+            if not self._model_config_map:
+                self._model_config_map = self._parse_model_config()
+            model_config = self._model_config_map.get(model_name, {})
+            api_key = model_config.get("api_key") or self.valves.api_key
+            
             async with httpx.AsyncClient(
-                headers={"x-goog-api-key": self.valves.api_key},
+                headers={"x-goog-api-key": api_key},
                 proxy=self.valves.proxy or None,
                 trust_env=True,
                 timeout=self.valves.timeout,
@@ -322,11 +339,10 @@ class Pipe:
         model = body["model"].split(".", 1)[1]
         
         # 获取该模型对应的 base_url
-        if not self._model_url_map:
-            self._model_url_map = self._parse_model_config()
-        base_url = self._model_url_map.get(
-            model, "https://generativelanguage.googleapis.com/v1beta/models"
-        )
+        if not self._model_config_map:
+            self._model_config_map = self._parse_model_config()
+        model_config = self._model_config_map.get(model, {})
+        base_url = model_config.get("base_url") or "https://generativelanguage.googleapis.com/v1beta/models"
         
         contents, system_instruction = self._build_contents(body["messages"])
         think_config = self._build_think_config(model, user_valves)
