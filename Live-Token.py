@@ -159,17 +159,6 @@ class Filter:
         enc = get_encoding_for_model(body.get("model", "unknown-model"))
         self.input_tokens = len(enc.encode(cleaned_text))
 
-        if __event_emitter__:
-            await __event_emitter__(
-                {
-                    "type": "status",
-                    "data": {
-                        "description": "Processing",
-                        "done": False,
-                    },
-                }
-            )
-
         self.start_time = time.time()
         return body
 
