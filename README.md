@@ -6,9 +6,9 @@
 
 ---
 
-## 🚀 核心插件概览
+## 核心插件概览
 
-### 🔍 搜索类 (Tools)
+### 搜索类 (Tools)
 
 *   **[Auto-Web-Search](./Auto-Web-Search/Auto-Web-Search.py)**
     *   **描述**：全能自动化网页搜索工具。
@@ -20,7 +20,7 @@
     *   **核心特性**：基于高德开放平台 API，支持全国城市的实时天气及未来几天天气预报查询。
     *   **适用场景**：日常生活查询、出行规划助手。
 
-### 📊 监控与增强 (Filters)
+### 监控与增强 (Filters)
 
 *   **[Live-Token](./Live-Token.py)**
     *   **描述**：实时 Token 追踪器。
@@ -35,20 +35,29 @@
     *   **描述**：时间上下文注入。
     *   **核心特性**：自动将当前精确的日期、时间、时区、星期信息注入系统提示词或用户消息中，让模型“知道今夕是何年”。
 
-### 🛠️ 实用工具 (Tools & Others)
+### 实用工具 (Tools & Others)
 
 *   **[Time-Tool](./Time-Tool.py)**：支持时区的时间查询工具，供模型主动调用。
 *   **[Calculator](./calculator.py)**：基于 SymPy 的安全科学计算器，解决大模型常有的“算术难”问题。
-*   **[Max-Turns-Limit](./max_turns_limit.py)**：对话轮数限制器。通过强制限制对话次数，有效避免长上下文带来的性能下降和 Token 浪费。
+*   **[Max-Turns-Limit](./max_turns_limit.py)**：对话轮数限制器。通过强制限制对话次数，有效避免长上下文带来的性能下降 and Token 浪费。
 
-### 🤖 模型适配 (Pipes & Actions)
+### 模型适配 (Pipes & Actions)
 
 *   **[Gemini-Adapter](./Gemini-Adapter)**
     *   针对 Google Gemini 系列模型深度优化，提供包括聊天适配、网页搜索增强、URL 上下文传递等功能。
 
+*   **[Claude-Messages](./Claude/Claude-Message.py)**
+    *   Claude API Pipe，支持思考模式、图片输入、Beta 工具（代码执行/网页抓取）。
+
+*   **[OpenAI-Responses](./OpenAI/OpenAI-Responses.py)**
+    *   OpenAI Realtime 适配插件。
+
+*   **[OpenRouter-Reasoning](./OpenRouter/OpenRouter-Reasoning.py)**
+    *   为 OpenRouter 的 GPT-5 / Gemini 3 系列推理模型提供思考强度控制。
+
 ---
 
-## 📥 安装与使用
+## 安装与使用
 
 1.  **下载代码**：点击对应的 `.py` 文件，复制其源代码。
 2.  **导入 Open WebUI**：
@@ -61,7 +70,7 @@
 
 ---
 
-## 🛠️ 开发者指南
+## 开发者指南
 
 如果你有新的想法或发现了 Bug，欢迎提交 Issue 或 Pull Request！
 
