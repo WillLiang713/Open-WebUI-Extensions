@@ -45,6 +45,7 @@
 
 *   **[Gemini-Adapter](./Gemini-Adapter)**
     *   针对 Google Gemini 系列模型深度优化，提供包括聊天适配、网页搜索增强、URL 上下文传递等功能。
+    *   工具字段统一使用蛇形命名：`google_search` / `code_execution` / `url_context` / `function_declarations` / `tool_config` / `function_calling_config`。
 
 *   **[Claude-Messages](./Claude/Claude-Message.py)**
     *   Claude API Pipe，支持思考模式、图片输入、Beta 工具（代码执行/网页抓取）。

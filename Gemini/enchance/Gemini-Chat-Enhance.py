@@ -418,27 +418,27 @@ class Pipe:
         gemini_tools = self._convert_tools(tools_param, functions_param)
 
         has_google_search = any(
-            isinstance(tool, dict) and "googleSearch" in tool for tool in gemini_tools
+            isinstance(tool, dict) and "google_search" in tool for tool in gemini_tools
         )
         has_function_decls = any(
-            isinstance(tool, dict) and "functionDeclarations" in tool for tool in gemini_tools
+            isinstance(tool, dict) and "function_declarations" in tool for tool in gemini_tools
         )
 
         # Google Search 与函数声明互斥，优先使用 Google Search
         if has_google_search and has_function_decls:
-            gemini_tools = [tool for tool in gemini_tools if "googleSearch" in tool]
+            gemini_tools = [tool for tool in gemini_tools if "google_search" in tool]
             has_function_decls = False
 
         tool_choice = body.get("tool_choice") or body.get("function_call")
         tool_config = self._convert_tool_config(tool_choice) if has_function_decls else None
 
         if has_function_decls and not tool_config:
-            tool_config = {"functionCallingConfig": {"mode": "AUTO"}}
+            tool_config = {"function_calling_config": {"mode": "AUTO"}}
 
         if gemini_tools:
             payload["json"]["tools"] = gemini_tools
         if tool_config:
-            payload["json"]["toolConfig"] = tool_config
+            payload["json"]["tool_config"] = tool_config
 
     # ========================================================================
     # 消息构建
@@ -534,26 +534,6 @@ class Pipe:
                 return {"__raw__": value}
         return value
 
-    @staticmethod
-    def _normalize_tools_casing(tools: List[dict]) -> List[dict]:
-        """将工具字段统一为 camelCase"""
-        normalized: List[dict] = []
-        for tool in tools or []:
-            if not isinstance(tool, dict):
-                normalized.append(tool)
-                continue
-            tool = dict(tool)
-            if "google_search" in tool and "googleSearch" not in tool:
-                tool["googleSearch"] = tool.pop("google_search")
-            if "code_execution" in tool and "codeExecution" not in tool:
-                tool["codeExecution"] = tool.pop("code_execution")
-            if "url_context" in tool and "urlContext" not in tool:
-                tool["urlContext"] = tool.pop("url_context")
-            if "function_declarations" in tool and "functionDeclarations" not in tool:
-                tool["functionDeclarations"] = tool.pop("function_declarations")
-            normalized.append(tool)
-        return normalized
-
     def _convert_tools(
         self, tools: List[dict], functions: Optional[List[dict]] = None
     ) -> List[dict]:
@@ -564,18 +544,18 @@ class Pipe:
         results: List[Dict[str, Any]] = []
         function_declarations: List[Dict[str, Any]] = []
 
-        for tool in self._normalize_tools_casing(tools or []):
+        for tool in tools or []:
             if not tool:
                 continue
 
             # Google Search
-            if tool.get("googleSearch") is not None:
-                search_config = tool.get("googleSearch")
-                results.append({"googleSearch": search_config or {}})
+            if tool.get("google_search") is not None:
+                search_config = tool.get("google_search")
+                results.append({"google_search": search_config or {}})
                 continue
 
             # 已有函数声明
-            decls = tool.get("functionDeclarations")
+            decls = tool.get("function_declarations")
             if decls:
                 function_declarations.extend(decls)
                 continue
@@ -589,7 +569,7 @@ class Pipe:
             function_declarations.append(self._build_function_declaration(fn))
 
         if function_declarations:
-            results.append({"functionDeclarations": function_declarations})
+            results.append({"function_declarations": function_declarations})
 
         return results
 
@@ -606,20 +586,20 @@ class Pipe:
         if not tool_choice:
             return None
 
-        config: Dict[str, Any] = {"functionCallingConfig": {}}
+        config: Dict[str, Any] = {"function_calling_config": {}}
 
         if isinstance(tool_choice, str):
             mode_map = {"auto": "AUTO", "none": "NONE", "required": "ANY"}
             mode = mode_map.get(tool_choice)
             if not mode:
                 return None
-            config["functionCallingConfig"]["mode"] = mode
+            config["function_calling_config"]["mode"] = mode
         elif isinstance(tool_choice, dict):
             fn_name = tool_choice.get("function", {}).get("name") or tool_choice.get("name")
             if not fn_name:
                 return None
-            config["functionCallingConfig"]["mode"] = "ANY"
-            config["functionCallingConfig"]["allowedFunctionNames"] = [fn_name]
+            config["function_calling_config"]["mode"] = "ANY"
+            config["function_calling_config"]["allowed_function_names"] = [fn_name]
         else:
             return None
 
