@@ -138,13 +138,22 @@ class Tools:
 
     async def web_search(
         self,
-        search_queries: list[str],
+        search_queries: Optional[list[str]] = None,
+        queries: Optional[list[str]] = None,
         __event_emitter__: Any = None,
         __user__: Optional[dict] = None,
     ) -> str:
         """Search the web for a query."""
         if __user__ is None:
             raise ValueError("User information is required")
+
+        merged_queries: list[str] = []
+        if search_queries:
+            merged_queries.extend(search_queries)
+        if queries:
+            merged_queries.extend(queries)
+        if not merged_queries:
+            raise ValueError("search_queries is required")
 
         search_mode = self.valves.SEARCH_MODE
         user = Users.get_user_by_id(__user__["id"])
@@ -153,7 +162,7 @@ class Tools:
 
         if search_mode == "perplexica":
             return await perplexica_web_search(
-                search_queries,
+                merged_queries,
                 base_url=self.valves.PERPLEXICA_BASE_URL,
                 optimization_mode=self.valves.PERPLEXICA_OPTIMIZATION_MODE,
                 chat_model=self.valves.PERPLEXICA_CHAT_MODEL,
@@ -163,7 +172,7 @@ class Tools:
             )
         elif search_mode == "native":
             return await native_web_search(
-                search_queries, emitter=__event_emitter__, user=user
+                merged_queries, emitter=__event_emitter__, user=user
             )
         else:
             raise ValueError(f"Unknown search mode: {search_mode}")

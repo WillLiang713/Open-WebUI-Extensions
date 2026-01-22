@@ -288,7 +288,8 @@ class Tools:
 
     async def web_search(
         self,
-        search_queries: list[str],
+        search_queries: Optional[list[str]] = None,
+        queries: Optional[list[str]] = None,
         __event_emitter__: Any = None,
         __user__: Optional[dict] = None,
     ) -> str:
@@ -296,9 +297,17 @@ class Tools:
         if __user__ is None:
             raise ValueError("User information is required")
 
+        merged_queries: list[str] = []
+        if search_queries:
+            merged_queries.extend(search_queries)
+        if queries:
+            merged_queries.extend(queries)
+        if not merged_queries:
+            raise ValueError("search_queries is required")
+
         cleaned: list[str] = []
 
-        for q in search_queries:
+        for q in merged_queries:
             if isinstance(q, dict):
                 q = q.get("query") or q.get("text") or ""
             q = str(q or "").strip()
