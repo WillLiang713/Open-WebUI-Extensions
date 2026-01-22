@@ -26,22 +26,28 @@ class Filter:
         )
 
     def inlet(self, body: dict) -> dict:
-        tools = body.get("tools")
-        if tools is None:
-            tools = []
-            body["tools"] = tools
+        tools = body.get("tools") or []
+        body["tools"] = tools
 
-        existing = set()
+        # Normalize Gemini tool casing (snake -> camel)
         for tool in tools:
             if isinstance(tool, dict):
-                for key in tool.keys():
-                    existing.add(key)
+                if "google_search" in tool and "googleSearch" not in tool:
+                    tool["googleSearch"] = tool.pop("google_search")
+                if "code_execution" in tool and "codeExecution" not in tool:
+                    tool["codeExecution"] = tool.pop("code_execution")
+                if "url_context" in tool and "urlContext" not in tool:
+                    tool["urlContext"] = tool.pop("url_context")
+                if "function_declarations" in tool and "functionDeclarations" not in tool:
+                    tool["functionDeclarations"] = tool.pop("function_declarations")
 
-        if "code_execution" not in existing:
-            tools.append({"code_execution": {}})
-        if "google_search" not in existing and "googleSearch" not in existing:
-            tools.append({"google_search": {}})
-        if "url_context" not in existing:
-            tools.append({"url_context": {}})
+        existing = {k for t in tools if isinstance(t, dict) for k in t}
+
+        if "googleSearch" not in existing:
+            tools.append({"googleSearch": {}})
+        if "codeExecution" not in existing:
+            tools.append({"codeExecution": {}})
+        if "urlContext" not in existing:
+            tools.append({"urlContext": {}})
 
         return body

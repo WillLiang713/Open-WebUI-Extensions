@@ -534,6 +534,26 @@ class Pipe:
                 return {"__raw__": value}
         return value
 
+    @staticmethod
+    def _normalize_tools_casing(tools: List[dict]) -> List[dict]:
+        """将工具字段统一为 camelCase"""
+        normalized: List[dict] = []
+        for tool in tools or []:
+            if not isinstance(tool, dict):
+                normalized.append(tool)
+                continue
+            tool = dict(tool)
+            if "google_search" in tool and "googleSearch" not in tool:
+                tool["googleSearch"] = tool.pop("google_search")
+            if "code_execution" in tool and "codeExecution" not in tool:
+                tool["codeExecution"] = tool.pop("code_execution")
+            if "url_context" in tool and "urlContext" not in tool:
+                tool["urlContext"] = tool.pop("url_context")
+            if "function_declarations" in tool and "functionDeclarations" not in tool:
+                tool["functionDeclarations"] = tool.pop("function_declarations")
+            normalized.append(tool)
+        return normalized
+
     def _convert_tools(
         self, tools: List[dict], functions: Optional[List[dict]] = None
     ) -> List[dict]:
@@ -544,18 +564,18 @@ class Pipe:
         results: List[Dict[str, Any]] = []
         function_declarations: List[Dict[str, Any]] = []
 
-        for tool in tools or []:
+        for tool in self._normalize_tools_casing(tools or []):
             if not tool:
                 continue
 
             # Google Search
-            if tool.get("googleSearch") is not None or tool.get("google_search") is not None:
-                search_config = tool.get("googleSearch") or tool.get("google_search")
+            if tool.get("googleSearch") is not None:
+                search_config = tool.get("googleSearch")
                 results.append({"googleSearch": search_config or {}})
                 continue
 
             # 已有函数声明
-            decls = tool.get("functionDeclarations") or tool.get("function_declarations")
+            decls = tool.get("functionDeclarations")
             if decls:
                 function_declarations.extend(decls)
                 continue
