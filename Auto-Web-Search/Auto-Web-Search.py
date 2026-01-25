@@ -212,7 +212,7 @@ class Tools:
             description="Tavily search depth (basic or advanced).",
         )
         tavily_max_results: int = Field(
-            default=3, ge=1, le=10, description="Max results per query for Tavily."
+            default=5, ge=1, le=10, description="Max results per query for Tavily."
         )
         exa_api_key: Optional[str] = Field(default=None, description="API key for Exa.")
         exa_base_url: str = Field(
@@ -220,7 +220,7 @@ class Tools:
             description="Exa base URL.",
         )
         exa_max_results: int = Field(
-            default=3, ge=1, le=10, description="Max results per query for Exa."
+            default=5, ge=1, le=10, description="Max results per query for Exa."
         )
         exa_search_type: str = Field(
             default="auto",
@@ -232,7 +232,7 @@ class Tools:
             description="Jina Search base URL.",
         )
         jina_search_max_results: int = Field(
-            default=3, ge=1, le=10, description="Max results per query for Jina Search."
+            default=5, ge=1, le=10, description="Max results per query for Jina Search."
         )
         jina_reader_base_url: str = Field(
             default="https://r.jina.ai",
@@ -625,7 +625,10 @@ async def firecrawl_fetch_url(
 
 
 async def tavily_fetch_url(
-    url: str, emitter: Any, api_key: str, base_url: str
+    url: str,
+    emitter: Any,
+    api_key: str,
+    base_url: str,
 ) -> str:
     try:
         parsed_url = urlparse(url)
@@ -641,7 +644,7 @@ async def tavily_fetch_url(
         endpoint = f"{base_url}/extract"
         payload = {
             "urls": [url],
-            "include_images": False,
+            "format": "markdown",
         }
         headers = {"Authorization": f"Bearer {api_key}"}
 
@@ -713,7 +716,10 @@ async def tavily_fetch_url(
 
 
 async def exa_fetch_url(
-    url: str, emitter: Any, api_key: str, base_url: str
+    url: str,
+    emitter: Any,
+    api_key: str,
+    base_url: str,
 ) -> str:
     try:
         parsed_url = urlparse(url)
@@ -743,8 +749,8 @@ async def exa_fetch_url(
         content = (
             item.get("text")
             or item.get("content")
-            or item.get("summary")
             or item.get("snippet")
+            or item.get("summary")
             or item.get("highlights")
             or ""
         )
@@ -822,7 +828,10 @@ async def jina_reader_fetch_url(
         )
 
         endpoint = _build_jina_reader_url(base_url, url)
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {
+            "Accept": "text/markdown",
+            "X-Return-Format": "markdown",
+        }
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
@@ -975,9 +984,7 @@ async def tavily_web_search(
                 payload = {
                     "query": query,
                     "search_depth": search_depth,
-                    "include_answer": False,
-                    "include_images": False,
-                    "include_raw_content": False,
+                    "include_raw_content": "markdown",
                     "max_results": max_results,
                 }
                 response = await client.post(endpoint, json=payload, headers=headers)
@@ -1063,9 +1070,7 @@ async def exa_web_search(
                     "query": query,
                     "type": search_type,
                     "numResults": max_results,
-                    "contents": {
-                        "text": True,
-                    },
+                    "contents": {"text": True},
                 }
                 response = await client.post(endpoint, json=payload, headers=headers)
                 response.raise_for_status()
@@ -1173,7 +1178,10 @@ async def jina_web_search(
         )
 
         results: list[dict[str, Any]] = []
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {
+            "Accept": "application/json",
+            "X-Return-Format": "markdown",
+        }
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
