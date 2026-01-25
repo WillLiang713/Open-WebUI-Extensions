@@ -148,17 +148,13 @@ def _normalize_search_item(item: dict[str, Any]) -> dict[str, str]:
     url = item.get("link") or item.get("url") or ""
     title = item.get("title") or item.get("name") or ""
     content = item.get("snippet") or item.get("content") or item.get("text") or ""
-    favicon = item.get("favicon") or item.get("icon") or ""
 
     url = str(url)
     if url and not (url.startswith("http://") or url.startswith("https://")):
         url = ""
 
     name = title or (_domain_from_url(url) if url else "") or "unknown"
-    normalized = {"name": str(name), "url": url, "content": str(content)}
-    if favicon:
-        normalized["favicon"] = str(favicon)
-    return normalized
+    return {"name": str(name), "url": url, "content": str(content)}
 
 
 async def _emit_search_citations(
@@ -1162,11 +1158,6 @@ async def jina_web_search(
             if desc_match:
                 item["content"] = desc_match.group(1).strip()
             
-            # 解析 Favicon
-            favicon_match = re.search(r'\[\d+\]\s*Favicon:\s*(.+?)(?:\n|$)', block)
-            if favicon_match:
-                item["favicon"] = favicon_match.group(1).strip()
-            
             if item.get("url") or item.get("title"):
                 items.append(item)
         
@@ -1182,9 +1173,7 @@ async def jina_web_search(
         )
 
         results: list[dict[str, Any]] = []
-        headers: dict[str, str] = {
-            "X-With-Favicons": "true",
-        }
+        headers: dict[str, str] = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
