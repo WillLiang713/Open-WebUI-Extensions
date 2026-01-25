@@ -148,14 +148,17 @@ def _normalize_search_item(item: dict[str, Any]) -> dict[str, str]:
     url = item.get("link") or item.get("url") or ""
     title = item.get("title") or item.get("name") or ""
     content = item.get("snippet") or item.get("content") or item.get("text") or ""
+    favicon = item.get("favicon") or item.get("icon") or ""
 
     url = str(url)
     if url and not (url.startswith("http://") or url.startswith("https://")):
         url = ""
 
     name = title or (_domain_from_url(url) if url else "") or "unknown"
-    return {"name": str(name), "url": url, "content": str(content)}
-
+    normalized = {"name": str(name), "url": url, "content": str(content)}
+    if favicon:
+        normalized["favicon"] = str(favicon)
+    return normalized
 
 
 async def _emit_search_citations(
@@ -495,6 +498,8 @@ async def fetch_url_with_fallback(
         provider, firecrawl_api_key, tavily_api_key, exa_api_key
     )
     if selected == "firecrawl":
+        if not firecrawl_api_key:
+            raise ValueError("Firecrawl API key is required")
         return await firecrawl_fetch_url(
             url=url,
             emitter=emitter,
@@ -502,6 +507,8 @@ async def fetch_url_with_fallback(
             base_url=firecrawl_base_url,
         )
     if selected == "tavily":
+        if not tavily_api_key:
+            raise ValueError("Tavily API key is required")
         return await tavily_fetch_url(
             url=url,
             emitter=emitter,
@@ -509,6 +516,8 @@ async def fetch_url_with_fallback(
             base_url=tavily_base_url,
         )
     if selected == "exa":
+        if not exa_api_key:
+            raise ValueError("Exa API key is required")
         return await exa_fetch_url(
             url=url,
             emitter=emitter,
@@ -908,6 +917,8 @@ async def web_search_with_provider(
         provider, tavily_api_key, exa_api_key, jina_api_key
     )
     if selected == "tavily":
+        if not tavily_api_key:
+            raise ValueError("Tavily API key is required")
         return await tavily_web_search(
             search_queries=search_queries,
             emitter=emitter,
@@ -917,6 +928,8 @@ async def web_search_with_provider(
             max_results=tavily_max_results,
         )
     if selected == "exa":
+        if not exa_api_key:
+            raise ValueError("Exa API key is required")
         return await exa_web_search(
             search_queries=search_queries,
             emitter=emitter,
@@ -1066,12 +1079,6 @@ async def exa_web_search(
                     results.extend(items)
 
         search_results = [_normalize_search_item(it) for it in results if it]
-        await _maybe_convert_favicons(
-            search_results,
-            mode=favicon_mode,
-            timeout=favicon_fetch_timeout,
-            max_bytes=favicon_max_bytes,
-        )
         await _emit_search_citations(search_results, emitter)
 
         await emit_status(
@@ -1216,12 +1223,6 @@ async def jina_web_search(
                         )
 
         search_results = [_normalize_search_item(it) for it in results if it]
-        await _maybe_convert_favicons(
-            search_results,
-            mode=favicon_mode,
-            timeout=favicon_fetch_timeout,
-            max_bytes=favicon_max_bytes,
-        )
         await _emit_search_citations(search_results, emitter)
 
         await emit_status(
@@ -1295,12 +1296,6 @@ async def native_web_search(
         )
 
         search_results = [_normalize_search_item(it) for it in items if it]
-        await _maybe_convert_favicons(
-            search_results,
-            mode=favicon_mode,
-            timeout=favicon_fetch_timeout,
-            max_bytes=favicon_max_bytes,
-        )
         await _emit_search_citations(search_results, emitter)
         await emit_status(
             f"searched {len(search_results)} website{'s' if len(search_results) != 1 else ''}",
@@ -1345,6 +1340,3 @@ async def native_web_search(
                 "error": str(e),
             }
         )
-
-
-
