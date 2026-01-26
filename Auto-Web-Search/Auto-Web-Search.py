@@ -147,7 +147,16 @@ def _domain_from_url(u: str) -> str:
 def _normalize_search_item(item: dict[str, Any]) -> dict[str, str]:
     url = item.get("link") or item.get("url") or ""
     title = item.get("title") or item.get("name") or ""
-    content = item.get("snippet") or item.get("content") or item.get("text") or ""
+    content = (
+        item.get("raw_content")
+        or item.get("page_content")
+        or item.get("markdown")
+        or item.get("content")
+        or item.get("text")
+        or item.get("snippet")
+        or item.get("description")
+        or ""
+    )
 
     url = str(url)
     if url and not (url.startswith("http://") or url.startswith("https://")):
@@ -566,7 +575,7 @@ async def firecrawl_fetch_url(
             payload_data = {}
 
         content = ""
-        for key in ("markdown", "content", "text", "html"):
+        for key in ("markdown", "text", "content", "html"):
             if payload_data.get(key):
                 content = str(payload_data.get(key) or "")
                 break
@@ -658,12 +667,7 @@ async def tavily_fetch_url(
         if not isinstance(item, dict):
             item = {}
 
-        content = (
-            item.get("content")
-            or item.get("raw_content")
-            or item.get("text")
-            or ""
-        )
+        content = item.get("content") or item.get("text") or ""
         metadata = {
             "source": item.get("url") or url,
             "url": item.get("url") or url,
@@ -746,14 +750,7 @@ async def exa_fetch_url(
         if not isinstance(item, dict):
             item = {}
 
-        content = (
-            item.get("text")
-            or item.get("content")
-            or item.get("snippet")
-            or item.get("summary")
-            or item.get("highlights")
-            or ""
-        )
+        content = item.get("text") or item.get("content") or ""
         if isinstance(content, list):
             content = "\n".join([str(part) for part in content if part])
         if not isinstance(content, str):
@@ -841,10 +838,16 @@ async def jina_reader_fetch_url(
             content_type = response.headers.get("content-type", "")
             if "application/json" in content_type.lower():
                 data = response.json()
+                nested = data.get("data") if isinstance(data, dict) else None
+                nested_content = ""
+                if isinstance(nested, dict):
+                    nested_content = nested.get("content") or nested.get("text") or ""
+                elif isinstance(nested, str):
+                    nested_content = nested
                 content = (
-                    data.get("data")
-                    or data.get("content")
+                    data.get("content")
                     or data.get("text")
+                    or nested_content
                     or json.dumps(data)
                 )
             else:
