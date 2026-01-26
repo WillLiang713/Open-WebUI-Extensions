@@ -252,6 +252,7 @@ async def native_web_search(
                         or item.get("url")
                         or item.get("source")
                         or "",
+                        "title": item.get("title") or item.get("name") or "",
                         "content": item.get("snippet")
                         or item.get("content")
                         or item.get("text")
@@ -271,7 +272,9 @@ async def native_web_search(
                         or (item.get("metadata") or {}).get("url")
                         or "",
                         "title": (item.get("metadata") or {}).get("title") or "",
-                        "content": item.get("content") or "",
+                        "content": (item.get("metadata") or {}).get("snippet")
+                        or item.get("content")
+                        or "",
                     }
                     for item in docs
                     if item
@@ -281,15 +284,32 @@ async def native_web_search(
         item_count = len(search_results)
 
         if emitter:
+            documents = []
+            metadata = []
             for sr in search_results:
-                source_name = sr.get("title") or sr.get("source") or "unknown"
+                link = sr.get("source", "")
+                if not link:
+                    continue
+                title = sr.get("title", "")
+                snippet = sr.get("content", "")
+                doc = f"{title}\n{snippet}".strip()
+                documents.append(doc)
+                metadata.append(
+                    {
+                        "source": link,
+                        "name": title,
+                        "url": link,
+                    }
+                )
+
+            if documents:
                 await emitter(
                     {
                         "type": "citation",
                         "data": {
-                            "document": [sr.get("content", "")],
-                            "metadata": [{"source": sr.get("source", "")}],
-                            "source": {"name": source_name},
+                            "source": {"name": "search_web", "id": "search_web"},
+                            "document": documents,
+                            "metadata": metadata,
                         },
                     }
                 )
@@ -298,7 +318,9 @@ async def native_web_search(
             f"searched {item_count} website{'s' if item_count != 1 else ''}",
             status="web_search",
             done=True,
-            extra_data={"urls": [sr["source"] for sr in search_results]},
+            extra_data={
+                "urls": [sr["source"] for sr in search_results if sr.get("source")]
+            },
             emitter=emitter,
         )
 
