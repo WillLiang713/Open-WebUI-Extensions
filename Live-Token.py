@@ -160,6 +160,18 @@ class Filter:
         self.input_tokens = len(enc.encode(cleaned_text))
 
         self.start_time = time.time()
+
+        # Optional: show input token status at inlet (always estimated)
+        if __event_emitter__ and self.valves.show_tokens:
+            await __event_emitter__(
+                {
+                    "type": "status",
+                    "data": {
+                        "description": "Input...",
+                        "done": False,
+                    },
+                }
+            )
         return body
 
     async def outlet(
