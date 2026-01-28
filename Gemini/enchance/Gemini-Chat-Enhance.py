@@ -50,12 +50,21 @@ class StreamState:
 
 class Pipe:
     class Valves(BaseModel):
-        models: str = Field(
-            default="gemini-3-pro-preview@https://generativelanguage.googleapis.com/v1beta/models",
-            title="模型配置",
-            description="格式：模型ID@base_url@api_key，api_key可选。例如：gemini-3-pro@https://api1.com/v1beta/models@sk-key1,gemini-3-flash@https://api2.com/v1beta/models@sk-key2",
+        base_url: str = Field(
+            default="https://generativelanguage.googleapis.com/v1beta/models",
+            title="API Base URL",
+            description="API 地址",
         )
-        api_key: Optional[str] = Field(default=None, title="默认 API Key", description="可选，未指定 api_key 的模型将使用此默认值")
+        models: str = Field(
+            default="gemini-3-pro-preview",
+            title="模型列表",
+            description="多个模型ID用英文逗号分隔，例如：gemini-3-pro,gemini-3-flash",
+        )
+        api_key: Optional[str] = Field(
+            default=None,
+            title="API Key",
+            description="API Key",
+        )
         allow_params: Optional[str] = Field(
             default="",
             title="透传参数",
@@ -78,7 +87,7 @@ class Pipe:
         thinking_budget: int = Field(
             default=-1,
             title="思考预算",
-            description="适用 Gemini 2.5 系列，-1 表示自动控制",
+            description="适用 Gemini 2.5 系列，-1 表示自动控制（部分 Lite 模型可能不支持，建议设置为 >=512 的正整数）",
         )
 
     def __init__(self):
@@ -88,29 +97,15 @@ class Pipe:
     def _parse_model_config(self) -> Dict[str, Dict[str, str]]:
         """解析模型配置，返回模型ID到{base_url, api_key}的映射"""
         model_config_map = {}
-        default_base_url = "https://generativelanguage.googleapis.com/v1beta/models"
-        
+        base_url = self.valves.base_url.strip() or "https://generativelanguage.googleapis.com/v1beta/models"
+        api_key = (self.valves.api_key or "").strip()
+
         for item in self.valves.models.split(","):
-            item = item.strip()
-            if not item:
+            model_id = item.strip()
+            if not model_id:
                 continue
-            
-            parts = item.split("@")
-            if len(parts) >= 3:
-                # 格式：模型ID@base_url@api_key
-                model_id = parts[0].strip()
-                base_url = parts[1].strip()
-                api_key = parts[2].strip()
-                model_config_map[model_id] = {"base_url": base_url, "api_key": api_key}
-            elif len(parts) == 2:
-                # 格式：模型ID@base_url（使用默认 api_key）
-                model_id = parts[0].strip()
-                base_url = parts[1].strip()
-                model_config_map[model_id] = {"base_url": base_url, "api_key": ""}
-            else:
-                # 兼容旧格式：只有模型ID
-                model_config_map[item] = {"base_url": default_base_url, "api_key": ""}
-        
+            model_config_map[model_id] = {"base_url": base_url, "api_key": api_key}
+
         return model_config_map
 
     def pipes(self):
@@ -392,7 +387,7 @@ class Pipe:
 
     def _build_think_config(self, model: str, user_valves: UserValves) -> dict:
         """构建思考配置"""
-        config = {"includeThoughts": True}
+        config: Dict[str, Any] = {"includeThoughts": True}
 
         if "gemini-3" in model:
             if "gemini-3-flash" in model:
@@ -408,7 +403,7 @@ class Pipe:
 
     def _build_extra_params(self, body: dict) -> dict:
         """构建额外参数"""
-        allowed_params = [k for k in self.valves.allow_params.split(",") if k]
+        allowed_params = [k for k in (self.valves.allow_params or "").split(",") if k]
         return {key: val for key, val in body.items() if key in allowed_params}
 
     def _add_tools_to_payload(self, payload: dict, body: dict) -> None:
