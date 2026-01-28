@@ -1,8 +1,8 @@
 """
-title: Gemini Tools
+title: Gemini Web Search
 author: OVINC CN
 git_url: https://github.com/OVINC-CN/OpenWebUIPlugin.git
-description: Gemini tools: code execution + web search + url context
+description: Gemini tools: web search
 version: 0.0.3
 licence: MIT
 """
@@ -33,9 +33,4 @@ class Filter:
 
         if "google_search" not in existing:
             tools.append({"google_search": {}})
-        if "code_execution" not in existing:
-            tools.append({"code_execution": {}})
-        if "url_context" not in existing:
-            tools.append({"url_context": {}})
-
         return body
