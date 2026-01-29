@@ -84,10 +84,20 @@ class Pipe:
             title="Pro 推理强度",
             description="适用 Gemini 3 Pro：low/high（上游最终决定支持范围）",
         )
-        thinking_budget: int = Field(
+        thinking_budget_pro: int = Field(
             default=-1,
-            title="思考预算",
-            description="适用 Gemini 2.5 系列，-1 表示自动控制（部分 Lite 模型可能不支持，建议设置为 >=512 的正整数）",
+            title="2.5 Pro 思考预算",
+            description="Gemini 2.5 Pro：-1 动态开启；最小 128 / 最大 32768；不可设为 0",
+        )
+        thinking_budget_flash: int = Field(
+            default=-1,
+            title="2.5 Flash 思考预算",
+            description="Gemini 2.5 Flash：-1 动态开启；最小 0 / 最大 24576；设为 0 可关闭",
+        )
+        thinking_budget_flash_lite: int = Field(
+            default=0,
+            title="2.5 Flash-Lite 思考预算",
+            description="Gemini 2.5 Flash-Lite：默认 0 关闭；最小 0 / 最大 24576；设为 0 可关闭",
         )
 
     def __init__(self):
@@ -388,18 +398,52 @@ class Pipe:
     def _build_think_config(self, model: str, user_valves: UserValves) -> dict:
         """构建思考配置"""
         config: Dict[str, Any] = {"includeThoughts": True}
+        model_lower = model.lower()
 
-        if "gemini-3" in model:
-            if "gemini-3-flash" in model:
+        if "gemini-3" in model_lower:
+            if "gemini-3-flash" in model_lower:
                 config["thinkingLevel"] = user_valves.reasoning_effort_flash
-            elif "gemini-3-pro" in model:
+            elif "gemini-3-pro" in model_lower:
                 config["thinkingLevel"] = user_valves.reasoning_effort_pro
             else:
                 config["thinkingLevel"] = user_valves.reasoning_effort_flash
-        elif user_valves.thinking_budget >= 0:
-            config["thinkingBudget"] = user_valves.thinking_budget
+            return config
+
+        if "gemini-2.5" in model_lower or "gemini-2-5" in model_lower:
+            if "flash-lite" in model_lower or "flash_lite" in model_lower or "flashlite" in model_lower:
+                thinking_budget = user_valves.thinking_budget_flash_lite
+                min_budget, max_budget, allow_zero = 0, 24576, True
+            elif "flash" in model_lower:
+                thinking_budget = user_valves.thinking_budget_flash
+                min_budget, max_budget, allow_zero = 0, 24576, True
+            elif "pro" in model_lower:
+                thinking_budget = user_valves.thinking_budget_pro
+                min_budget, max_budget, allow_zero = 128, 32768, False
+            else:
+                thinking_budget = user_valves.thinking_budget_flash
+                min_budget, max_budget, allow_zero = 0, 24576, True
+
+            normalized_budget = self._normalize_thinking_budget(
+                thinking_budget, min_budget, max_budget, allow_zero
+            )
+            if normalized_budget is not None:
+                config["thinkingBudget"] = normalized_budget
 
         return config
+
+    def _normalize_thinking_budget(
+        self, budget: int, min_budget: int, max_budget: int, allow_zero: bool
+    ) -> Optional[int]:
+        """按 Gemini 2.5 模型规格规范化 thinkingBudget，返回 None 表示不下发"""
+        if budget is None or budget == -1:
+            return None
+        if budget == 0:
+            return 0 if allow_zero else min_budget
+        if budget < min_budget:
+            return min_budget
+        if budget > max_budget:
+            return max_budget
+        return budget
 
     def _build_extra_params(self, body: dict) -> dict:
         """构建额外参数"""
