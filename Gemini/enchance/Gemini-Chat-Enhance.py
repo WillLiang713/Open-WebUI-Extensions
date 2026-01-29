@@ -32,6 +32,7 @@ class StreamState:
     """流式处理状态管理"""
     model: str = ""
     is_thinking: bool = True
+    think_opened: bool = False
     tool_call_index: int = 0
     total_tool_calls: int = 0
     buffer: str = ""
@@ -40,7 +41,7 @@ class StreamState:
         """关闭思考状态，返回是否需要输出关闭标签"""
         if self.is_thinking:
             self.is_thinking = False
-            return True
+            return self.think_opened
         return False
 
 
@@ -145,8 +146,11 @@ class Pipe:
         self, body: dict, __user__: dict, __request__: Request
     ) -> AsyncIterable:
         user_valves: Pipe.UserValves = __user__["valves"]
-        model, payload = await self._build_payload(body=body, user_valves=user_valves)
-        state = StreamState(model=model)
+        allow_thinking = self._allow_thinking(body)
+        model, payload = await self._build_payload(
+            body=body, user_valves=user_valves, allow_thinking=allow_thinking
+        )
+        state = StreamState(model=model, is_thinking=allow_thinking)
 
         try:
             # 获取该模型对应的 api_key
@@ -168,9 +172,6 @@ class Pipe:
                             yield chunk
                         return
 
-                    # 开始思考块
-                    yield self._format_data(is_stream=True, model=model, content="<think>")
-
                     async for raw_line in response.aiter_lines():
                         if self.valves.log_upstream:
                             logger.info("[GeminiChatPipe] upstream raw line: %s", raw_line)
@@ -184,7 +185,7 @@ class Pipe:
                             yield chunk
 
                     # 确保关闭思考块
-                    if state.is_thinking:
+                    if state.is_thinking and state.think_opened:
                         yield self._close_thinking_block(state)
 
         except Exception as err:
@@ -271,6 +272,11 @@ class Pipe:
             # 处理思考内容
             if part.get("thought", False):
                 if state.is_thinking:
+                    if not state.think_opened:
+                        state.think_opened = True
+                        yield self._format_data(
+                            is_stream=True, model=state.model, content="<think>"
+                        )
                     thought_text = part.get("text", "")
                     if thought_text:
                         yield self._format_data(
@@ -347,8 +353,33 @@ class Pipe:
     # Payload 构建
     # ========================================================================
 
+    def _allow_thinking(self, body: dict) -> bool:
+        """根据请求判断是否允许思考内容输出"""
+        if body.get("stream") is False:
+            return False
+        if self._expects_structured_response(body):
+            return False
+        return True
+
+    def _expects_structured_response(self, body: dict) -> bool:
+        """检测是否期望结构化输出（如 JSON）"""
+        response_format = body.get("response_format")
+        if isinstance(response_format, dict):
+            fmt_type = (response_format.get("type") or "").lower()
+            if "json" in fmt_type:
+                return True
+        elif isinstance(response_format, str):
+            if "json" in response_format.lower():
+                return True
+
+        fmt = body.get("format")
+        if isinstance(fmt, str) and "json" in fmt.lower():
+            return True
+
+        return False
+
     async def _build_payload(
-        self, body: dict, user_valves: UserValves
+        self, body: dict, user_valves: UserValves, allow_thinking: bool
     ) -> Tuple[str, dict]:
         model = body["model"].split(".", 1)[1]
         
@@ -359,7 +390,7 @@ class Pipe:
         base_url = model_config.get("base_url") or "https://generativelanguage.googleapis.com/v1beta/models"
         
         contents, system_instruction = self._build_contents(body["messages"])
-        think_config = self._build_think_config(model, user_valves)
+        think_config = self._build_think_config(model, user_valves, allow_thinking)
         extra_data = self._build_extra_params(body)
 
         payload = {
@@ -404,8 +435,13 @@ class Pipe:
 
         return contents, system_instruction
 
-    def _build_think_config(self, model: str, user_valves: UserValves) -> dict:
+    def _build_think_config(
+        self, model: str, user_valves: UserValves, allow_thinking: bool
+    ) -> dict:
         """构建思考配置"""
+        if not allow_thinking:
+            return {"includeThoughts": False}
+
         config: Dict[str, Any] = {"includeThoughts": True}
         model_lower = model.lower()
 
