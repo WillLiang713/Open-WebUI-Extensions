@@ -72,6 +72,11 @@ class Pipe:
         )
         timeout: int = Field(default=600, title="请求超时时间 (秒)")
         proxy: Optional[str] = Field(default=None, title="代理地址")
+        log_upstream: bool = Field(
+            default=False,
+            title="Log upstream",
+            description="Log raw SSE lines and parsed payloads from upstream",
+        )
 
     class UserValves(BaseModel):
         reasoning_effort_flash: Literal["minimal", "low", "medium", "high"] = Field(
@@ -167,9 +172,13 @@ class Pipe:
                     yield self._format_data(is_stream=True, model=model, content="<think>")
 
                     async for raw_line in response.aiter_lines():
+                        if self.valves.log_upstream:
+                            logger.info("[GeminiChatPipe] upstream raw line: %s", raw_line)
                         parsed = self._parse_sse_line(raw_line, state)
                         if parsed is None:
                             continue
+                        if self.valves.log_upstream:
+                            logger.info("[GeminiChatPipe] upstream parsed: %s", parsed)
 
                         async for chunk in self._process_candidates(parsed, state):
                             yield chunk
