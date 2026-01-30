@@ -1,87 +1,81 @@
 # Open-WebUI-Extensions
 
-本仓库致力于收集和开发适用于 [Open WebUI](https://github.com/open-webui/open-webui) 的各类功能强大且实用的扩展（Tools, Filters, Actions, Pipes）。
+本仓库收集与维护一组适用于 [Open WebUI](https://github.com/open-webui/open-webui) 的扩展脚本与提示词模板，涵盖：Tools / Filters / Pipes / Prompts。
 
-无论你是想增强搜索能力、监控 Token 消耗，还是适配特定模型，这里都有你需要的工具。
+> 说明：本仓库以“可直接复制到 Open WebUI 工作空间导入”为目标；README 中仅列出当前目录里**实际存在**的脚本与文件，避免出现失效链接。
 
 ---
 
 ## 核心插件概览
 
-### 搜索类 (Tools)
+### 搜索与网页内容 (Tools)
 
-*   **[Auto-Web-Search](./Auto-Web-Search/Auto-Web-Search.py)**
-    *   **描述**：全能自动化网页搜索工具。
-    *   **核心特性**：支持 Tavily, Exa, Jina 等多种主流搜索引擎；具备网页抓取功能（Firecrawl, Reader 等）；支持状态实时反馈和精美的引用显示。
-    *   **适用场景**：需要大模型进行实时、准确的互联网信息检索时。
+- **[Auto-Web-Search (Native)](./Auto-Web-Search/Auto-Web-Search-Native.py)**
+  - **描述**：调用 Open WebUI 自带的检索与网页加载能力的“原生搜索/抓取”工具。
+  - **核心特性**：支持 `web_search`（多 query）与 `fetch_url_content`（抓取指定 URL）；可通过事件实时输出状态与引用（citation）。
+  - **适用场景**：需要让模型检索互联网信息，或读取指定链接正文。
 
-*   **[Weather](./Weather/Weather.py)**
-    *   **描述**：高德天气查询工具。
-    *   **核心特性**：基于高德开放平台 API，支持全国城市的实时天气及未来几天天气预报查询。
-    *   **适用场景**：日常生活查询、出行规划助手。
+- **[Weather](./Weather/Weather.py)**
+  - **描述**：高德天气查询工具。
+  - **核心特性**：基于高德开放平台 API；支持实时天气与未来天气预报；内置常用城市 adcode 映射。
+  - **数据文件**：[`Weather/AMap_adcode_citycode.xlsx`](./Weather/AMap_adcode_citycode.xlsx)（全国 adcode/citycode 表，可用于扩展映射）。
 
 ### 监控与增强 (Filters)
 
-*   **[Live-Token](./Live-Token.py)**
-    *   **描述**：实时 Token 追踪器。
-    *   **核心特性**：在聊天界面实时显示输入/输出 Token 数量、响应耗时、生成速率 (T/s)。
-    *   **适用场景**：成本控制、性能调优、多模态内容 Token 估算。
+- **[Live-Token](./Live-Token.py)**
+  - **描述**：实时 Token / 耗时 / 生成速率统计。
+  - **核心特性**：优先使用 API 返回的 `usage`；无 `usage` 时使用 `tiktoken` 估算；支持多模态内容的粗略计数策略。
 
-*   **[Deep-Thinking](./Deep-Thinking.py)**
-    *   **描述**：深度思考模式开启器。
-    *   **核心特性**：为支持思索/推理功能的模型自动注入 `thinking` 字段，一键开启深度思考。
+- **[Deep-Thinking](./Deep-Thinking.py)**
+  - **描述**：深度思考模式开启器。
+  - **核心特性**：为支持推理/思考字段的模型请求自动注入 `thinking` 配置。
 
-*   **[Time-Inject-Filter](./Time-Inject-Filter.py)**
-    *   **描述**：时间上下文注入。
-    *   **核心特性**：自动将当前精确的日期、时间、时区、星期信息注入系统提示词或用户消息中，让模型“知道今夕是何年”。
+- **[Time-Inject-Filter](./Time-Inject-Filter.py)**
+  - **描述**：时间上下文注入。
+  - **核心特性**：自动注入当前日期、时间、时区、星期信息；可注入到 system message 或最后一条 user message 前。
 
-### 实用工具 (Tools & Others)
+### 实用工具 (Tools)
 
-*   **[Time-Tool](./Time-Tool.py)**：支持时区的时间查询工具，供模型主动调用。
-*   **[Calculator](./calculator.py)**：基于 SymPy 的安全科学计算器，解决大模型常有的“算术难”问题。
-*   **[Max-Turns-Limit](./max_turns_limit.py)**：对话轮数限制器。通过强制限制对话次数，有效避免长上下文带来的性能下降 and Token 浪费。
+- **[Time-Tool](./Time-Tool.py)**：返回配置时区的当前时间（JSON）。
+- **[Calculator](./Calculator.py)**：基于 SymPy 的科学计算器（表达式解析 + 求值）。
 
-### 模型适配 (Pipes & Actions)
+### 模型适配 (Pipes)
 
-*   **[Gemini-Adapter](./Gemini-Adapter)**
-    *   针对 Google Gemini 系列模型深度优化，提供包括聊天适配、网页搜索增强、URL 上下文传递等功能。
-    *   工具字段统一使用蛇形命名：`google_search` / `code_execution` / `url_context` / `function_declarations` / `tool_config` / `function_calling_config`。
+- **[OpenRouter-Reasoning](./OpenRouter/OpenRouter-Reasoning.py)**
+  - **描述**：为 OpenRouter 推理模型提供思考强度控制，并对流式响应中的 reasoning 进行包装处理。
 
-*   **[Claude-Messages](./Claude/Claude-Message.py)**
-    *   Claude API Pipe，支持思考模式、图片输入、Beta 工具（代码执行/网页抓取）。
+---
 
-*   **[OpenAI-Responses](./OpenAI/OpenAI-Responses.py)**
-    *   OpenAI Realtime 适配插件。
+## Prompts（提示词模板）
 
-*   **[OpenRouter-Reasoning](./OpenRouter/OpenRouter-Reasoning.py)**
-    *   为 OpenRouter 的 GPT-5 / Gemini 3 系列推理模型提供思考强度控制。
+这些模板用于从聊天记录自动生成“追问 / 标签 / 标题”（输出为 JSON）：
+
+- **追问**：[`Prompts/fllow.md`](./Prompts/fllow.md)
+- **标签**：[`Prompts/tags.md`](./Prompts/tags.md)
+- **标题**：[`Prompts/title.md`](./Prompts/title.md)
 
 ---
 
 ## 安装与使用
 
-1.  **下载代码**：点击对应的 `.py` 文件，复制其源代码。
-2.  **导入 Open WebUI**：
-    *   前往 Open WebUI 界面 -> **Workspace (工作空间)** -> **Functions (函数)** 或 **Tools (工具)**。
-    *   点击 **Create (+) / Import**。
-    *   粘贴代码并保存。
-3.  **配置 Valves (阀门/设置)**：
-    *   许多插件（如搜索和天气）需要配置 API Key。
-    *   在插件管理界面，点击对应插件的设置图标，填写所需的 `VALVES` 配置。
+1. **选择脚本**：点击上面的 `.py` 文件链接，复制其源代码。
+2. **导入 Open WebUI**：
+   - 打开 Open WebUI -> **Workspace (工作空间)**。
+   - 根据脚本类型导入：**Tools / Filters / Pipes**（不同版本 UI 文案可能略有差异）。
+   - 点击 **Create (+) / Import**，粘贴代码并保存。
+3. **配置 Valves (阀门/设置)**：
+   - 部分插件需要配置参数（例如 [`Weather/Weather.py`](./Weather/Weather.py) 需要 `AMAP_API_KEY`）。
+   - 在插件管理界面点击设置图标，填写对应的 `VALVES`。
+4. **依赖说明**：
+   - 少量脚本在头部元信息里声明了 `requirements`（例如 [`Live-Token.py`](./Live-Token.py) 需要 `tiktoken`）。
+   - 具体安装方式取决于你的 Open WebUI 部署方式（Docker/本地/容器镜像等）。
 
 ---
 
-## 开发者指南
+## 贡献
 
-如果你有新的想法或发现了 Bug，欢迎提交 Issue 或 Pull Request！
-
-### 环境建议
-建议使用 `uv` 进行依赖管理（仓库已包含 `pyproject.toml` 和 `uv.lock`）。
-
-```bash
-uv sync
-```
+欢迎提交 Issue / Pull Request 来新增扩展或修复问题。
 
 ---
 
-**提示**：本仓库由 [@WillLiang713](https://github.com/WillLiang713) 维护。如有疑问，欢迎通过 GitHub 互动。
+**提示**：本仓库由 [@WillLiang713](https://github.com/WillLiang713) 维护。
